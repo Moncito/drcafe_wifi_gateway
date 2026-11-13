@@ -18,7 +18,7 @@ UTAK terminal / PC / phone ──► https://<project>.vercel.app ◄── rout
 3. Don't deploy yet. First do steps 2 and 3.
 
 ## 2. Database (once)
-Project → **Storage** → **Create** → **Turso** (Marketplace) → region **Singapore** →
+Project → **Storage** → **Create** → **Turso** (Marketplace) → region **AP NorthEast (Tokyo), hnd1** (no Singapore option; Tokyo is closest to Manila) →
 connect it to this project. That adds `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN`
 to the project's environment variables automatically.
 
