@@ -1692,6 +1692,10 @@ function loadConfig() {
   if (mode !== "mock" && mode !== "router") throw new Error(`ROUTER_MODE must be mock or router, got "${mode}"`);
   const found = Object.entries(process.env).find(([k, v]) => k.endsWith("_URL") && /^libsql:\/\//.test(v ?? ""));
   let databaseUrl = env("DATABASE_URL", env("TURSO_DATABASE_URL", found?.[1] ?? "file:./data/panel.db"));
+  if (process.env.VERCEL && databaseUrl.startsWith("file:")) {
+    databaseUrl = env("TURSO_DATABASE_URL", found?.[1] ?? "");
+    if (!databaseUrl) throw new Error("On Vercel the panel needs the Turso database (TURSO_DATABASE_URL). Connect it under Storage.");
+  }
   const foundPrefix = found ? found[0].slice(0, -"_URL".length) : "";
   if (databaseUrl.startsWith("file:") && !databaseUrl.startsWith("file:/") && !/^file:[A-Za-z]:/.test(databaseUrl)) {
     databaseUrl = "file:" + resolve(PANEL_DIR, databaseUrl.slice(5)).replace(/\\/g, "/");
