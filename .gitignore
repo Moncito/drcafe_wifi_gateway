@@ -16,3 +16,8 @@ panel/.env.*
 !panel/.env.example
 # Vercel bundle (built on every deploy)
 panel/index.mjs
+# Vercel CLI link + pulled settings (contain secrets)
+.vercel
+
+.vercel
+.env*
