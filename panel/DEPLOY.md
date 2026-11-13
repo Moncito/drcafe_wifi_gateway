@@ -53,7 +53,7 @@ Change code in `panel/src`, then:
 ```
 npm run check
 npm test
-npm run build      (regenerates api/index.mjs, which Vercel runs. Commit it.)
+npm run build      (optional locally: Vercel builds index.mjs on every deploy)
 ```
 Push to `main`; Vercel deploys automatically.
 

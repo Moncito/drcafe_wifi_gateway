@@ -8,7 +8,7 @@ import { buildRoutes } from "./web/routes.ts";
 
 /** Folder holding public/ (on Vercel the function runs from the project root). */
 function rootDir(): string {
-  if (existsSync(join(process.cwd(), "public", "css", "app.css"))) return process.cwd();
+  if (existsSync(join(process.cwd(), "public", "static", "css", "app.css"))) return process.cwd();
   return join(dirname(fileURLToPath(import.meta.url)), "..");
 }
 
@@ -20,7 +20,8 @@ export function createApp(cfg: Config) {
   const app = express();
   app.disable("x-powered-by");
   app.set("trust proxy", true);
-  app.use("/static", express.static(join(rootDir(), "public"), { maxAge: "10m" }));
+  // public/static/... is served at /static/... (on Vercel its CDN serves public/ directly)
+  app.use(express.static(join(rootDir(), "public"), { maxAge: "10m", index: false }));
   app.use(express.urlencoded({ extended: false, limit: "20kb" }));
   app.use(buildRoutes({ db, cfg }));
   app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {

@@ -13,7 +13,7 @@
     "admin": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env src/cli.ts",
     "check": "tsc --noEmit",
     "test": "node --disable-warning=ExperimentalWarning --test \"test/**/*.test.ts\"",
-    "build": "esbuild src/vercel.ts --bundle --platform=node --format=esm --target=node22 --packages=external --outfile=api/index.mjs --log-level=warning"
+    "build": "esbuild src/vercel.ts --bundle --platform=node --format=esm --target=node22 --packages=external --outfile=index.mjs --log-level=warning"
   },
   "dependencies": {
     "@libsql/client": "^0.18.0",

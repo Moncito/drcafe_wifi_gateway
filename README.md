@@ -54,7 +54,7 @@ copy .env.example .env      (ROUTER_MODE=mock: a built-in fake router checks in 
 npm run dev                 (http://127.0.0.1:8080, restarts on file changes)
 npm test                    (batches, router check-in round trip, void, disconnect, clock)
 npm run check               (TypeScript type check)
-npm run build               (bundle for Vercel: api/index.mjs, commit it)
+npm run build               (bundle for Vercel: index.mjs, built by Vercel on deploy)
 ```
 The fake router follows the Phase 1 rules (clock time, 7 devices per group code, 1:00–5:00 AM cleanup)
 and pretends customers log in, so the dashboard fills up.
