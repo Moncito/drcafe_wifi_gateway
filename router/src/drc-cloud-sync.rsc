@@ -6,8 +6,21 @@
 # script "drc-cloud-config", whose source is one line:  https://PANEL/api/router/sync|KEY
 :local re "^[SG][A-HJKMNP-Z2-9]{5}\$"
 :local nl "\n"
-# never run twice at the same time (a slow run must finish first)
-:if ([:len [/system script job find where script="drc-cloud-sync"]] > 1) do={ :error "drc-cloud-sync: previous run still busy" }
+# Never run twice at the same time. But a run can get stuck forever (e.g. a call
+# that hangs when the internet line drops). If an older run has been busy for
+# 3 check-ins (~1 minute), stop it and carry on, so check-ins always recover.
+:global drcSyncBusy
+:if ([:typeof $drcSyncBusy] != "num") do={ :set drcSyncBusy 0 }
+:local myJob [:pick [/system script job find where script="drc-cloud-sync"] ([:len [/system script job find where script="drc-cloud-sync"]] - 1)]
+:if ([:len [/system script job find where script="drc-cloud-sync"]] > 1) do={
+  :set drcSyncBusy ($drcSyncBusy + 1)
+  :if ($drcSyncBusy < 3) do={ :error "drc-cloud-sync: previous run still busy" }
+  :foreach j in=[/system script job find where script="drc-cloud-sync"] do={
+    :if ($j != $myJob) do={ /system script job remove $j }
+  }
+  :log warning "drc-cloud-sync: an earlier check-in was stuck and has been stopped"
+}
+:set drcSyncBusy 0
 :local cfgId [/system script find where name="drc-cloud-config"]
 :if ([:len $cfgId] = 0) do={ :error "drc-cloud-sync: script drc-cloud-config is missing" }
 :local cfgS [:tostr [/system script get $cfgId source]]

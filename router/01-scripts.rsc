@@ -66,7 +66,18 @@
 /system script remove [find where name="drc-cloud-sync"]
 /system script add name=drc-cloud-sync policy=read,write,test dont-require-permissions=no comment="Don Robert Cafe Wi-Fi" source=":local re \"^[SG][A-HJKMNP-Z2-9]{5}\\\$\"\r\
     \n:local nl \"\\n\"\r\
-    \n:if ([:len [/system script job find where script=\"drc-cloud-sync\"]] > 1) do={ :error \"drc-cloud-sync: previous run still busy\" }\r\
+    \n:global drcSyncBusy\r\
+    \n:if ([:typeof \$drcSyncBusy] != \"num\") do={ :set drcSyncBusy 0 }\r\
+    \n:local myJob [:pick [/system script job find where script=\"drc-cloud-sync\"] ([:len [/system script job find where script=\"drc-cloud-sync\"]] - 1)]\r\
+    \n:if ([:len [/system script job find where script=\"drc-cloud-sync\"]] > 1) do={\r\
+    \n  :set drcSyncBusy (\$drcSyncBusy + 1)\r\
+    \n  :if (\$drcSyncBusy < 3) do={ :error \"drc-cloud-sync: previous run still busy\" }\r\
+    \n  :foreach j in=[/system script job find where script=\"drc-cloud-sync\"] do={\r\
+    \n    :if (\$j != \$myJob) do={ /system script job remove \$j }\r\
+    \n  }\r\
+    \n  :log warning \"drc-cloud-sync: an earlier check-in was stuck and has been stopped\"\r\
+    \n}\r\
+    \n:set drcSyncBusy 0\r\
     \n:local cfgId [/system script find where name=\"drc-cloud-config\"]\r\
     \n:if ([:len \$cfgId] = 0) do={ :error \"drc-cloud-sync: script drc-cloud-config is missing\" }\r\
     \n:local cfgS [:tostr [/system script get \$cfgId source]]\r\
