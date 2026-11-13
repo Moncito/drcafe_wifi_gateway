@@ -30,7 +30,11 @@ function env(name: string, fallback = ""): string {
 export function loadConfig(): Config {
   const mode = env("ROUTER_MODE", "mock");
   if (mode !== "mock" && mode !== "router") throw new Error(`ROUTER_MODE must be mock or router, got "${mode}"`);
-  let databaseUrl = env("DATABASE_URL", env("TURSO_DATABASE_URL", "file:./data/panel.db"));
+  // Turso settings: DATABASE_URL / TURSO_DATABASE_URL, or whatever <PREFIX>_URL the
+  // Vercel integration created (the one whose value is a libsql:// address).
+  const found = Object.entries(process.env).find(([k, v]) => k.endsWith("_URL") && /^libsql:\/\//.test(v ?? ""));
+  let databaseUrl = env("DATABASE_URL", env("TURSO_DATABASE_URL", found?.[1] ?? "file:./data/panel.db"));
+  const foundPrefix = found ? found[0].slice(0, -"_URL".length) : "";
   if (databaseUrl.startsWith("file:") && !databaseUrl.startsWith("file:/") && !/^file:[A-Za-z]:/.test(databaseUrl)) {
     databaseUrl = "file:" + resolve(PANEL_DIR, databaseUrl.slice(5)).replace(/\\/g, "/");
   }
@@ -38,7 +42,7 @@ export function loadConfig(): Config {
     host: env("PANEL_HOST", "127.0.0.1"),
     port: Number(env("PANEL_PORT", "8080")),
     databaseUrl,
-    databaseToken: env("DATABASE_AUTH_TOKEN", env("TURSO_AUTH_TOKEN")),
+    databaseToken: env("DATABASE_AUTH_TOKEN", env("TURSO_AUTH_TOKEN", foundPrefix ? env(`${foundPrefix}_AUTH_TOKEN`, env(`${foundPrefix}_TOKEN`)) : "")),
     routerToken: env("ROUTER_TOKEN"),
     routerMode: mode,
     soloProfile: env("SOLO_PROFILE", "solo-3h"),
