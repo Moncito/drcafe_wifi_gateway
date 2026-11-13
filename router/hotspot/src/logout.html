@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+{{HEAD}}
+<title>Logged out · Don Robert Café</title>
+<style>{{STYLE}}</style>
+</head>
+<body class="dark">
+<div class="dark-page">
+  <img class="logo" src="img/logo.png" alt="Don Robert Café">
+  <div class="stack-c" style="margin-top:24px">
+    <p class="enjoy">You're logged out.</p>
+  </div>
+  <div class="card">
+    $(if username)
+    <span class="k">Code</span>
+    <span class="big code">$(username)</span>
+    <p>Online for $(uptime) this time. If the code still has time left, you can log in again with it. Its 3 hours keep running either way.</p>
+    $(endif)
+    <p>Got a new slip? Enter its code on the next screen.</p>
+    <a class="btn" href="$(link-login)">Enter a code</a>
+  </div>
+  <p class="foot">Salamat sa pagbisita · See you again soon</p>
+</div>
+</body>
+</html>

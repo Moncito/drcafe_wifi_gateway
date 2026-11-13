@@ -1,0 +1,17 @@
+# Text files are stored with LF line endings.
+* text=auto eol=lf
+
+# Binary files: never touch.
+*.pdf   binary
+*.png   binary
+*.ico   binary
+*.woff2 binary
+
+# Windows scripts keep CRLF.
+*.cmd text eol=crlf
+*.vbs text eol=crlf
+*.ps1 text eol=crlf
+
+# Files uploaded to the MikroTik are kept byte for byte as built.
+*.rsc -text
+router/hotspot/drc-hotspot/** -text

@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="pragma" content="no-cache">
+<meta http-equiv="expires" content="-1">
+<meta name="theme-color" content="#14100D">
+<link rel="icon" href="data:,">
+<title>Don Robert Café · Free Wi‑Fi</title>
+<style>/* Inlined into every page by build.mjs. System fonts only (no internet before login).
+   NOTE: never write a dollar sign followed by "(" in this file: MikroTik treats it as a variable. */
+:root{--esp:#14100D;--esp2:#1E1713;--esp3:#2C221B;--beige:#F3ECE0;--card:#FBF8F2;--caramel:#C9A27A;--brown:#8A5A2B;--ink:#1E1612;--ink2:#3B2A20;--muted:#5C4636;--muted2:#7A6555;--line:#DCCDB8;--field:#CDBBA3;--soft:#B8A894;--ok:#9FCF9F;--amber:#E0A46A;--err:#9C2F23;
+--serif:"Cormorant Garamond",Georgia,"Times New Roman",serif;--sans:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;--mono:ui-monospace,"SF Mono",Menlo,Consolas,"Roboto Mono",monospace}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%}
+body{background:var(--esp);color:var(--beige);font-family:var(--sans);font-size:16px;line-height:1.45;-webkit-text-size-adjust:100%}
+a{color:var(--brown)}
+.dark a{color:var(--caramel)}
+h1{margin:0;font-family:var(--serif);font-weight:600;line-height:1.05}
+p{margin:0}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.hidden{display:none!important}
+
+/* ---- layout: hero on top, beige sheet below (phones); side by side on laptops ---- */
+.page{min-height:100vh;display:flex;flex-direction:column}
+.hero{position:relative;min-height:300px;display:flex;flex-direction:column;align-items:center;padding:40px 24px 24px;overflow:hidden}
+.hero .logo{position:relative;width:220px;max-width:70%;height:auto;display:block}
+.cup{position:absolute;top:80px;left:50%;width:420px;height:420px;margin-left:-210px}
+.sheet{position:relative;flex:1;background:var(--beige);color:var(--ink);border-radius:28px 28px 0 0;padding:32px 24px 28px;display:flex;flex-direction:column;gap:20px;box-shadow:0 -12px 40px rgba(0,0,0,.45)}
+.inner{width:100%;max-width:420px;margin:0 auto;display:flex;flex-direction:column;gap:20px;flex:1}
+.pitch{display:none}
+@media (min-width:900px){
+  .page{flex-direction:row}
+  .hero{flex:1 1 50%;min-height:100vh;justify-content:space-between;align-items:flex-start;padding:56px 64px}
+  .hero .logo{width:240px}
+  .cup{top:auto;bottom:-120px;left:auto;right:-80px;margin:0;width:520px;height:520px;opacity:.55}
+  .pitch{display:flex;flex-direction:column;gap:22px;position:relative;max-width:440px}
+  .pitch h2{margin:0;font-family:var(--serif);font-weight:500;font-size:44px;line-height:1.05}
+  .steps{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:14px}
+  .steps li{display:flex;gap:14px;align-items:center;color:#D9C7AE}
+  .steps b{width:34px;height:34px;border-radius:50%;border:1.5px solid var(--caramel);color:var(--caramel);display:flex;align-items:center;justify-content:center;flex:none;font-weight:600}
+  .sheet{flex:1 1 50%;border-radius:0;box-shadow:none;justify-content:center;padding:56px 48px}
+  .inner{flex:0 1 auto}
+}
+
+/* ---- text ---- */
+.eyebrow{font-size:12px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:var(--brown)}
+.title{font-size:34px;color:var(--ink)}
+.title i{font-weight:500}
+.lead{font-size:15px;line-height:1.5;color:var(--muted)}
+.stack{display:flex;flex-direction:column;gap:6px}
+.fine{margin-top:auto;font-size:12px;line-height:1.5;color:var(--muted2);text-align:center}
+.code{font-family:var(--mono);letter-spacing:.1em;color:var(--ink)}
+
+/* ---- form ---- */
+form{margin:0;display:flex;flex-direction:column;gap:12px}
+label{font-size:13px;font-weight:500;color:var(--ink2)}
+.code-input{height:58px;width:100%;border-radius:14px;border:1.5px solid var(--field);background:var(--card);padding:0 18px;font-family:var(--mono);font-size:22px;letter-spacing:.2em;color:var(--ink);text-transform:uppercase;outline:none;-webkit-appearance:none}
+.code-input::placeholder{color:#A6927F;letter-spacing:.2em}
+.code-input:focus{border-color:var(--brown);box-shadow:0 0 0 3px rgba(201,162,122,.35)}
+.code-input[aria-invalid=true]{border-color:var(--err)}
+.btn{height:56px;width:100%;border:0;border-radius:14px;background:var(--ink);color:var(--beige);font:600 16px var(--sans);letter-spacing:.02em;cursor:pointer;display:flex;align-items:center;justify-content:center;text-decoration:none;-webkit-appearance:none}
+.btn:disabled{opacity:.6}
+.btn-light{background:var(--beige);color:var(--ink)}
+.btn-ghost{background:transparent;border:1.5px solid var(--ink);color:var(--ink);height:52px;font-size:15px}
+/* links styled as buttons keep button colours inside .dark pages */
+a.btn{color:var(--beige)}
+a.btn-ghost{color:var(--ink);border-color:var(--ink)}
+.btn:focus-visible,.btn-ghost:focus-visible,a:focus-visible{outline:3px solid var(--caramel);outline-offset:2px}
+.or{display:flex;align-items:center;gap:12px;color:#8C7766;font-size:13px}
+.or:before,.or:after{content:"";flex:1;height:1px;background:var(--line)}
+.scan{display:flex;gap:12px;align-items:center;font-size:14px;color:var(--ink2);border:1.5px dashed var(--field);border-radius:14px;padding:12px 16px}
+.scan svg{flex:none}
+.alert{display:flex;gap:10px;align-items:flex-start;border-radius:12px;padding:12px 14px;font-size:14px;line-height:1.45}
+.alert-err{background:#F6DED8;color:#6E2017}
+.alert-info{background:#EADBC6;color:#4A3326}
+.alert svg{flex:none;margin-top:1px}
+
+/* ---- status screens (dark) ---- */
+.dark-page{min-height:100vh;display:flex;flex-direction:column;align-items:center;gap:24px;padding:36px 24px 28px;text-align:center}
+.dark-page .logo{width:150px;height:auto}
+.ring{position:relative;width:248px;height:248px;display:flex;align-items:center;justify-content:center}
+.ring svg{position:absolute;inset:0}
+.ring .arc{transition:stroke-dashoffset 1s linear}
+.ring-label{position:relative;display:flex;flex-direction:column;align-items:center;gap:2px}
+.ring-kicker{font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--soft)}
+.ring-time{font-family:var(--serif);font-size:64px;font-weight:600;line-height:1;color:var(--beige)}
+.ring-sub{font-size:13px;color:var(--soft)}
+.low .ring-kicker{color:var(--amber)}
+.online{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:var(--ok);justify-content:center}
+.online:before{content:"";width:8px;height:8px;border-radius:50%;background:var(--ok)}
+.chip{display:inline-flex;align-items:center;gap:10px;padding:7px 14px;border-radius:999px;border:1px solid var(--ink2);font-size:13px;color:#D9C7AE}
+.chip strong{color:var(--beige)}
+.enjoy{font-family:var(--serif);font-style:italic;font-weight:500;font-size:30px;line-height:1.1;color:var(--beige)}
+.card{width:100%;max-width:420px;background:var(--beige);color:var(--ink);border-radius:22px;padding:20px;display:flex;flex-direction:column;gap:12px;text-align:left}
+.card .k{font-size:12px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--brown)}
+.card .big{font-family:var(--mono);font-size:24px;letter-spacing:.12em}
+.card p{font-size:14px;line-height:1.45;color:var(--muted)}
+.card-row{display:flex;align-items:center;gap:12px}
+.card-row h1{font-size:28px;color:var(--ink)}
+.foot{margin-top:auto;font-size:13px;color:var(--soft)}
+.stack-c{display:flex;flex-direction:column;align-items:center;gap:8px}
+@media (min-width:900px){.dark-page{justify-content:center}}
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="hero">
+    <svg class="cup" aria-hidden="true" viewBox="0 0 460 460">
+  <defs>
+    <radialGradient id="cof" cx="50%" cy="45%" r="55%"><stop offset="0%" stop-color="#7A4E2E"/><stop offset="60%" stop-color="#4A2D1A"/><stop offset="100%" stop-color="#2A190E"/></radialGradient>
+    <radialGradient id="vig" cx="50%" cy="50%" r="50%"><stop offset="55%" stop-color="#14100D" stop-opacity="0"/><stop offset="100%" stop-color="#14100D" stop-opacity="1"/></radialGradient>
+  </defs>
+  <circle cx="230" cy="230" r="210" fill="#1E1713" stroke="#2C221B" stroke-width="2"/>
+  <circle cx="230" cy="230" r="170" fill="#E9DFD0"/>
+  <circle cx="230" cy="230" r="150" fill="url(#cof)"/>
+  <path d="M230 330 C 150 280, 160 190, 200 175 C 215 170, 228 180, 230 195 C 232 180, 245 170, 260 175 C 300 190, 310 280, 230 330 Z" fill="#E7D3B6" opacity="0.92"/>
+  <path d="M230 300 C 185 268, 192 214, 214 206 C 222 203, 229 210, 230 220 C 231 210, 238 203, 246 206 C 268 214, 275 268, 230 300 Z" fill="#6B4026" opacity="0.55"/>
+  <path d="M230 120 L230 330" stroke="#E7D3B6" stroke-width="3" opacity="0.7"/>
+  <circle cx="230" cy="230" r="230" fill="url(#vig)"/>
+</svg>
+    <img class="logo" src="img/logo.png" alt="Don Robert Café">
+    <div class="pitch">
+  <h2>Every cup comes with three hours of Wi‑Fi.</h2>
+  <ol class="steps">
+    <li><b>1</b>Order any drink at the counter</li>
+    <li><b>2</b>Type the code from your Wi‑Fi slip here</li>
+    <li><b>3</b>Another drink, another slip: 3 more hours</li>
+  </ol>
+</div>
+  </div>
+  <main class="sheet">
+    <div class="inner">
+      <div class="stack">
+        <p class="eyebrow">Free Wi‑Fi with every drink</p>
+        <h1 class="title">Welcome, <i>kape lover.</i></h1>
+        <p class="lead">Enter the code on your Wi‑Fi slip to get 3 hours online.</p>
+      </div>
+
+      <div id="err" class="alert alert-err$(if error)$(else) hidden$(endif)" role="alert"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16.5v.01"/></svg><span id="err-text">$(error)</span></div>
+
+      <form name="login" action="$(link-login-only)" method="post" onsubmit="return doLogin()" novalidate>
+        <input type="hidden" name="dst" value="$(link-orig)">
+        <input type="hidden" name="popup" value="true">
+        <input type="hidden" name="password" value="">
+        <label for="code">Wi‑Fi code</label>
+        <input id="code" class="code-input" name="username" type="text" value="$(username)" placeholder="S3K7PW"
+               maxlength="9" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false"
+               inputmode="text" aria-describedby="err-text" autofocus>
+        <button id="go" class="btn" type="submit">Connect</button>
+        <noscript><p class="lead">Please turn on JavaScript to log in, or scan the QR code on your slip.</p></noscript>
+      </form>
+
+      <div class="or">or</div>
+      <div class="scan">
+        <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1E1612" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3"/><path d="M7 12h10"/></svg>
+        <span>Scan the QR on your slip with your phone camera. It logs you in by itself.</span>
+      </div>
+
+      <p class="fine">Solo codes (S…) work on 1 device. Group codes (G…) work on up to 7 devices at once.<br>Every drink comes with a slip. Codes stop at 1:00 AM.</p>
+    </div>
+  </main>
+</div>
+<script>
+/* Shared helpers, inlined into pages. Never write a dollar sign followed by "(" here. */
+var CODE_RE = /^[SG][A-HJKMNP-Z2-9]{5}$/;
+var MANILA = 8 * 3600e3;
+function cleanCode(v) { return String(v || "").toUpperCase().replace(/[\s\-]+/g, ""); }
+function pad2(n) { return (n < 10 ? "0" : "") + n; }
+/* ms until the next 1:00 AM in Manila (codes stop then), whatever the phone's time zone */
+function msToClosing(now) {
+  var m = new Date(now + MANILA);
+  var c = Date.UTC(m.getUTCFullYear(), m.getUTCMonth(), m.getUTCDate(), 1, 0, 0) - MANILA;
+  if (m.getUTCHours() >= 1) c += 86400e3;
+  return c - now;
+}
+/* "4:32 PM" in Manila time */
+function manilaClock(t) {
+  var m = new Date(t + MANILA), h = m.getUTCHours(), h12 = h % 12 === 0 ? 12 : h % 12;
+  return h12 + ":" + pad2(m.getUTCMinutes()) + (h < 12 ? " AM" : " PM");
+}
+/* MikroTik durations: "2h47m3s", "1d2h", "45s" -> seconds (null if empty) */
+function parseRos(s) {
+  if (!s) return null;
+  var re = /(\d+)([wdhms])/g, m, t = 0, k = { w: 604800, d: 86400, h: 3600, m: 60, s: 1 }, any = false;
+  while ((m = re.exec(s))) { t += Number(m[1]) * k[m[2]]; any = true; }
+  if (!any && /^\d+:\d+:\d+$/.test(s)) { var p = s.split(":"); t = p[0] * 3600 + p[1] * 60 + Number(p[2]); any = true; }
+  return any ? t : null;
+}
+function el(id) { return document.getElementById(id); }
+
+/* MD5 for MikroTik CHAP login. Input chars are treated as bytes (0-255),
+   which is what the router puts in chap-id and chap-challenge. hexMD5(s) -> hex string. */
+function hexMD5(s) {
+  function add(x, y) { var l = (x & 0xFFFF) + (y & 0xFFFF); return (((x >> 16) + (y >> 16) + (l >> 16)) << 16) | (l & 0xFFFF); }
+  function rol(n, c) { return (n << c) | (n >>> (32 - c)); }
+  function cmn(q, a, b, x, s, t) { return add(rol(add(add(a, q), add(x, t)), s), b); }
+  function ff(a, b, c, d, x, s, t) { return cmn((b & c) | (~b & d), a, b, x, s, t); }
+  function gg(a, b, c, d, x, s, t) { return cmn((b & d) | (c & ~d), a, b, x, s, t); }
+  function hh(a, b, c, d, x, s, t) { return cmn(b ^ c ^ d, a, b, x, s, t); }
+  function ii(a, b, c, d, x, s, t) { return cmn(c ^ (b | ~d), a, b, x, s, t); }
+  var n = s.length, i, w = [];
+  for (i = 0; i < n; i++) w[i >> 2] |= (s.charCodeAt(i) & 255) << ((i % 4) * 8);
+  w[n >> 2] |= 0x80 << ((n % 4) * 8);
+  var len = (((n + 8) >> 6) + 1) * 16;
+  for (i = 0; i < len; i++) w[i] = w[i] | 0;
+  w[len - 2] = n * 8;
+  var a = 1732584193, b = -271733879, c = -1732584194, d = 271733878;
+  for (i = 0; i < len; i += 16) {
+    var oa = a, ob = b, oc = c, od = d, x = w;
+    a = ff(a, b, c, d, x[i], 7, -680876936); d = ff(d, a, b, c, x[i + 1], 12, -389564586); c = ff(c, d, a, b, x[i + 2], 17, 606105819); b = ff(b, c, d, a, x[i + 3], 22, -1044525330);
+    a = ff(a, b, c, d, x[i + 4], 7, -176418897); d = ff(d, a, b, c, x[i + 5], 12, 1200080426); c = ff(c, d, a, b, x[i + 6], 17, -1473231341); b = ff(b, c, d, a, x[i + 7], 22, -45705983);
+    a = ff(a, b, c, d, x[i + 8], 7, 1770035416); d = ff(d, a, b, c, x[i + 9], 12, -1958414417); c = ff(c, d, a, b, x[i + 10], 17, -42063); b = ff(b, c, d, a, x[i + 11], 22, -1990404162);
+    a = ff(a, b, c, d, x[i + 12], 7, 1804603682); d = ff(d, a, b, c, x[i + 13], 12, -40341101); c = ff(c, d, a, b, x[i + 14], 17, -1502002290); b = ff(b, c, d, a, x[i + 15], 22, 1236535329);
+    a = gg(a, b, c, d, x[i + 1], 5, -165796510); d = gg(d, a, b, c, x[i + 6], 9, -1069501632); c = gg(c, d, a, b, x[i + 11], 14, 643717713); b = gg(b, c, d, a, x[i], 20, -373897302);
+    a = gg(a, b, c, d, x[i + 5], 5, -701558691); d = gg(d, a, b, c, x[i + 10], 9, 38016083); c = gg(c, d, a, b, x[i + 15], 14, -660478335); b = gg(b, c, d, a, x[i + 4], 20, -405537848);
+    a = gg(a, b, c, d, x[i + 9], 5, 568446438); d = gg(d, a, b, c, x[i + 14], 9, -1019803690); c = gg(c, d, a, b, x[i + 3], 14, -187363961); b = gg(b, c, d, a, x[i + 8], 20, 1163531501);
+    a = gg(a, b, c, d, x[i + 13], 5, -1444681467); d = gg(d, a, b, c, x[i + 2], 9, -51403784); c = gg(c, d, a, b, x[i + 7], 14, 1735328473); b = gg(b, c, d, a, x[i + 12], 20, -1926607734);
+    a = hh(a, b, c, d, x[i + 5], 4, -378558); d = hh(d, a, b, c, x[i + 8], 11, -2022574463); c = hh(c, d, a, b, x[i + 11], 16, 1839030562); b = hh(b, c, d, a, x[i + 14], 23, -35309556);
+    a = hh(a, b, c, d, x[i + 1], 4, -1530992060); d = hh(d, a, b, c, x[i + 4], 11, 1272893353); c = hh(c, d, a, b, x[i + 7], 16, -155497632); b = hh(b, c, d, a, x[i + 10], 23, -1094730640);
+    a = hh(a, b, c, d, x[i + 13], 4, 681279174); d = hh(d, a, b, c, x[i], 11, -358537222); c = hh(c, d, a, b, x[i + 3], 16, -722521979); b = hh(b, c, d, a, x[i + 6], 23, 76029189);
+    a = hh(a, b, c, d, x[i + 9], 4, -640364487); d = hh(d, a, b, c, x[i + 12], 11, -421815835); c = hh(c, d, a, b, x[i + 15], 16, 530742520); b = hh(b, c, d, a, x[i + 2], 23, -995338651);
+    a = ii(a, b, c, d, x[i], 6, -198630844); d = ii(d, a, b, c, x[i + 7], 10, 1126891415); c = ii(c, d, a, b, x[i + 14], 15, -1416354905); b = ii(b, c, d, a, x[i + 5], 21, -57434055);
+    a = ii(a, b, c, d, x[i + 12], 6, 1700485571); d = ii(d, a, b, c, x[i + 3], 10, -1894986606); c = ii(c, d, a, b, x[i + 10], 15, -1051523); b = ii(b, c, d, a, x[i + 1], 21, -2054922799);
+    a = ii(a, b, c, d, x[i + 8], 6, 1873313359); d = ii(d, a, b, c, x[i + 15], 10, -30611744); c = ii(c, d, a, b, x[i + 6], 15, -1560198380); b = ii(b, c, d, a, x[i + 13], 21, 1309151649);
+    a = ii(a, b, c, d, x[i + 4], 6, -145523070); d = ii(d, a, b, c, x[i + 11], 10, -1120210379); c = ii(c, d, a, b, x[i + 2], 15, 718787259); b = ii(b, c, d, a, x[i + 9], 21, -343485551);
+    a = add(a, oa); b = add(b, ob); c = add(c, oc); d = add(d, od);
+  }
+  var hex = "0123456789abcdef", out = "", r = [a, b, c, d];
+  for (i = 0; i < 16; i++) { var v = (r[i >> 2] >> ((i % 4) * 8)) & 255; out += hex.charAt(v >> 4) + hex.charAt(v & 15); }
+  return out;
+}
+
+function showErr(t) {
+  el("err-text").textContent = t;
+  el("err").className = "alert alert-err";
+  el("code").setAttribute("aria-invalid", "true");
+  el("code").focus();
+}
+function doLogin() {
+  var f = document.login, c = cleanCode(f.username.value);
+  f.username.value = c;
+  if (!CODE_RE.test(c)) {
+    showErr(c.length !== 6
+      ? "Wi‑Fi codes have 6 characters and start with S or G, like S3K7PW."
+      : "That doesn't look like a slip code. Codes never contain 0, O, 1, I or L. Check the slip again.");
+    return false;
+  }
+  $(if chap-id)
+  f.password.value = hexMD5("$(chap-id)" + c + "$(chap-challenge)");
+  $(else)
+  f.password.value = c;
+  $(endif)
+  el("go").disabled = true;
+  el("go").textContent = "Connecting…";
+  return true;
+}
+// coming back with the Back button: make the button usable again
+window.addEventListener("pageshow", function () { el("go").disabled = false; el("go").textContent = "Connect"; });
+</script>
+</body>
+</html>

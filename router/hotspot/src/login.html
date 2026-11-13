@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+{{HEAD}}
+<title>Don Robert Café · Free Wi‑Fi</title>
+<style>{{STYLE}}</style>
+</head>
+<body>
+<div class="page">
+  <div class="hero">
+    {{CUP}}
+    <img class="logo" src="img/logo.png" alt="Don Robert Café">
+    {{PITCH}}
+  </div>
+  <main class="sheet">
+    <div class="inner">
+      <div class="stack">
+        <p class="eyebrow">Free Wi‑Fi with every drink</p>
+        <h1 class="title">Welcome, <i>kape lover.</i></h1>
+        <p class="lead">Enter the code on your Wi‑Fi slip to get 3 hours online.</p>
+      </div>
+
+      <div id="err" class="alert alert-err$(if error)$(else) hidden$(endif)" role="alert">{{ALERT_SVG}}<span id="err-text">$(error)</span></div>
+
+      <form name="login" action="$(link-login-only)" method="post" onsubmit="return doLogin()" novalidate>
+        <input type="hidden" name="dst" value="$(link-orig)">
+        <input type="hidden" name="popup" value="true">
+        <input type="hidden" name="password" value="">
+        <label for="code">Wi‑Fi code</label>
+        <input id="code" class="code-input" name="username" type="text" value="$(username)" placeholder="S3K7PW"
+               maxlength="9" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false"
+               inputmode="text" aria-describedby="err-text" autofocus>
+        <button id="go" class="btn" type="submit">Connect</button>
+        <noscript><p class="lead">Please turn on JavaScript to log in, or scan the QR code on your slip.</p></noscript>
+      </form>
+
+      <div class="or">or</div>
+      <div class="scan">
+        <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1E1612" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3"/><path d="M7 12h10"/></svg>
+        <span>Scan the QR on your slip with your phone camera. It logs you in by itself.</span>
+      </div>
+
+      <p class="fine">Solo codes (S…) work on 1 device. Group codes (G…) work on up to 7 devices at once.<br>Every drink comes with a slip. Codes stop at 1:00 AM.</p>
+    </div>
+  </main>
+</div>
+<script>
+{{COMMON}}
+{{MD5}}
+function showErr(t) {
+  el("err-text").textContent = t;
+  el("err").className = "alert alert-err";
+  el("code").setAttribute("aria-invalid", "true");
+  el("code").focus();
+}
+function doLogin() {
+  var f = document.login, c = cleanCode(f.username.value);
+  f.username.value = c;
+  if (!CODE_RE.test(c)) {
+    showErr(c.length !== 6
+      ? "Wi‑Fi codes have 6 characters and start with S or G, like S3K7PW."
+      : "That doesn't look like a slip code. Codes never contain 0, O, 1, I or L. Check the slip again.");
+    return false;
+  }
+  $(if chap-id)
+  f.password.value = hexMD5("$(chap-id)" + c + "$(chap-challenge)");
+  $(else)
+  f.password.value = c;
+  $(endif)
+  el("go").disabled = true;
+  el("go").textContent = "Connecting…";
+  return true;
+}
+// coming back with the Back button: make the button usable again
+window.addEventListener("pageshow", function () { el("go").disabled = false; el("go").textContent = "Connect"; });
+</script>
+</body>
+</html>

@@ -1,0 +1,16 @@
+# secrets / local copies
+*.local.rsc
+.env
+*.backup
+# panel
+node_modules/
+panel/data/
+router/hotspot/preview/
+router/backups/
+dist/
+# local tooling
+.claude/
+*.db
+*.db-*
+panel/.env.*
+!panel/.env.example

@@ -1,0 +1,51 @@
+/* A4 slip sheet: 4 x 12 = 48 slips, dashed cut lines, black & white friendly. */
+@font-face { font-family: "DM Sans"; src: url(/static/fonts/dm-sans-latin-400-normal.woff2) format("woff2"); font-weight: 400; }
+@font-face { font-family: "DM Sans"; src: url(/static/fonts/dm-sans-latin-700-normal.woff2) format("woff2"); font-weight: 700; }
+@font-face { font-family: "DM Mono"; src: url(/static/fonts/dm-mono-latin-500-normal.woff2) format("woff2"); font-weight: 500; }
+
+@page { size: A4 portrait; margin: 0; }
+
+* { box-sizing: border-box; }
+html, body { margin: 0; background: #e8e2d8; color: #111; font-family: "DM Sans", system-ui, sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+.toolbar {
+  position: sticky; top: 0; z-index: 2; display: flex; gap: 16px; align-items: center; justify-content: space-between;
+  padding: 10px 16px; background: #14100D; color: #F3ECE0; font-size: 14px; flex-wrap: wrap;
+}
+.tb-btn { color: #F3ECE0; background: transparent; border: 1.5px solid #6B4A35; border-radius: 10px; padding: 8px 16px; font: inherit; font-weight: 600; text-decoration: none; cursor: pointer; }
+.tb-primary { background: #F3ECE0; color: #14100D; border-color: #F3ECE0; }
+
+/* One A4 page. 7 mm margins: inside what almost every printer can print. */
+.sheet {
+  width: 210mm; height: 296mm; /* 1 mm under A4 so rounding never adds a blank page */ margin: 12px auto; background: #fff; padding: 7mm 7mm 7mm 7mm;
+  display: flex; flex-direction: column; gap: 2mm; overflow: hidden;
+  box-shadow: 0 2px 10px rgba(0,0,0,.15);
+}
+.sheet-head { display: flex; justify-content: space-between; gap: 4mm; font-size: 7.5pt; color: #444; height: 4mm; align-items: center; }
+.sheet-head strong { color: #111; }
+.sheet-grid {
+  flex: 1; display: grid; grid-template-columns: repeat(4, 1fr); grid-template-rows: repeat(12, 1fr);
+  border-top: 0.3mm dashed #888; border-left: 0.3mm dashed #888; min-height: 0;
+}
+.slip {
+  border-right: 0.3mm dashed #888; border-bottom: 0.3mm dashed #888;
+  padding: 1.6mm 2mm; display: flex; gap: 2mm; align-items: center; min-width: 0; overflow: hidden;
+}
+.slip-qr { width: 17mm; height: 17mm; flex: none; }
+.slip-qr svg { width: 100%; height: 100%; display: block; shape-rendering: crispEdges; }
+.slip-text { display: flex; flex-direction: column; gap: 0.5mm; min-width: 0; }
+.slip-top { display: flex; justify-content: space-between; align-items: center; gap: 1.5mm; }
+.slip-label { font-size: 6pt; font-weight: 700; letter-spacing: 0.1em; border: 0.25mm solid #111; border-radius: 99px; padding: 0.2mm 1.4mm; white-space: nowrap; }
+.slip-serial { font-family: "DM Mono", ui-monospace, monospace; font-size: 6.5pt; color: #333; }
+.slip-code { font-family: "DM Mono", ui-monospace, monospace; font-weight: 500; font-size: 13.5pt; line-height: 1.1; letter-spacing: 0.08em; color: #000; }
+.slip-small { font-size: 5.8pt; line-height: 1.25; color: #222; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.slip-small strong { color: #000; }
+
+@media print {
+  html, body { background: #fff; }
+  .no-print { display: none !important; }
+  .sheet { margin: 0; box-shadow: none; break-after: page; page-break-after: always; }
+  .sheet:last-of-type { break-after: auto; page-break-after: auto; }
+}
+/* the Wi-Fi name may wrap to 2 lines rather than being cut off */
+.slip-wifi { white-space: normal; overflow: visible; }

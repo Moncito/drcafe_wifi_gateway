@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="pragma" content="no-cache">
+<meta http-equiv="expires" content="-1">
+<meta name="theme-color" content="#14100D">
+<link rel="icon" href="data:,">
+<title>Wi‑Fi problem · Don Robert Café</title>
+<style>/* Inlined into every page by build.mjs. System fonts only (no internet before login).
+   NOTE: never write a dollar sign followed by "(" in this file: MikroTik treats it as a variable. */
+:root{--esp:#14100D;--esp2:#1E1713;--esp3:#2C221B;--beige:#F3ECE0;--card:#FBF8F2;--caramel:#C9A27A;--brown:#8A5A2B;--ink:#1E1612;--ink2:#3B2A20;--muted:#5C4636;--muted2:#7A6555;--line:#DCCDB8;--field:#CDBBA3;--soft:#B8A894;--ok:#9FCF9F;--amber:#E0A46A;--err:#9C2F23;
+--serif:"Cormorant Garamond",Georgia,"Times New Roman",serif;--sans:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;--mono:ui-monospace,"SF Mono",Menlo,Consolas,"Roboto Mono",monospace}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%}
+body{background:var(--esp);color:var(--beige);font-family:var(--sans);font-size:16px;line-height:1.45;-webkit-text-size-adjust:100%}
+a{color:var(--brown)}
+.dark a{color:var(--caramel)}
+h1{margin:0;font-family:var(--serif);font-weight:600;line-height:1.05}
+p{margin:0}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.hidden{display:none!important}
+
+/* ---- layout: hero on top, beige sheet below (phones); side by side on laptops ---- */
+.page{min-height:100vh;display:flex;flex-direction:column}
+.hero{position:relative;min-height:300px;display:flex;flex-direction:column;align-items:center;padding:40px 24px 24px;overflow:hidden}
+.hero .logo{position:relative;width:220px;max-width:70%;height:auto;display:block}
+.cup{position:absolute;top:80px;left:50%;width:420px;height:420px;margin-left:-210px}
+.sheet{position:relative;flex:1;background:var(--beige);color:var(--ink);border-radius:28px 28px 0 0;padding:32px 24px 28px;display:flex;flex-direction:column;gap:20px;box-shadow:0 -12px 40px rgba(0,0,0,.45)}
+.inner{width:100%;max-width:420px;margin:0 auto;display:flex;flex-direction:column;gap:20px;flex:1}
+.pitch{display:none}
+@media (min-width:900px){
+  .page{flex-direction:row}
+  .hero{flex:1 1 50%;min-height:100vh;justify-content:space-between;align-items:flex-start;padding:56px 64px}
+  .hero .logo{width:240px}
+  .cup{top:auto;bottom:-120px;left:auto;right:-80px;margin:0;width:520px;height:520px;opacity:.55}
+  .pitch{display:flex;flex-direction:column;gap:22px;position:relative;max-width:440px}
+  .pitch h2{margin:0;font-family:var(--serif);font-weight:500;font-size:44px;line-height:1.05}
+  .steps{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:14px}
+  .steps li{display:flex;gap:14px;align-items:center;color:#D9C7AE}
+  .steps b{width:34px;height:34px;border-radius:50%;border:1.5px solid var(--caramel);color:var(--caramel);display:flex;align-items:center;justify-content:center;flex:none;font-weight:600}
+  .sheet{flex:1 1 50%;border-radius:0;box-shadow:none;justify-content:center;padding:56px 48px}
+  .inner{flex:0 1 auto}
+}
+
+/* ---- text ---- */
+.eyebrow{font-size:12px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:var(--brown)}
+.title{font-size:34px;color:var(--ink)}
+.title i{font-weight:500}
+.lead{font-size:15px;line-height:1.5;color:var(--muted)}
+.stack{display:flex;flex-direction:column;gap:6px}
+.fine{margin-top:auto;font-size:12px;line-height:1.5;color:var(--muted2);text-align:center}
+.code{font-family:var(--mono);letter-spacing:.1em;color:var(--ink)}
+
+/* ---- form ---- */
+form{margin:0;display:flex;flex-direction:column;gap:12px}
+label{font-size:13px;font-weight:500;color:var(--ink2)}
+.code-input{height:58px;width:100%;border-radius:14px;border:1.5px solid var(--field);background:var(--card);padding:0 18px;font-family:var(--mono);font-size:22px;letter-spacing:.2em;color:var(--ink);text-transform:uppercase;outline:none;-webkit-appearance:none}
+.code-input::placeholder{color:#A6927F;letter-spacing:.2em}
+.code-input:focus{border-color:var(--brown);box-shadow:0 0 0 3px rgba(201,162,122,.35)}
+.code-input[aria-invalid=true]{border-color:var(--err)}
+.btn{height:56px;width:100%;border:0;border-radius:14px;background:var(--ink);color:var(--beige);font:600 16px var(--sans);letter-spacing:.02em;cursor:pointer;display:flex;align-items:center;justify-content:center;text-decoration:none;-webkit-appearance:none}
+.btn:disabled{opacity:.6}
+.btn-light{background:var(--beige);color:var(--ink)}
+.btn-ghost{background:transparent;border:1.5px solid var(--ink);color:var(--ink);height:52px;font-size:15px}
+/* links styled as buttons keep button colours inside .dark pages */
+a.btn{color:var(--beige)}
+a.btn-ghost{color:var(--ink);border-color:var(--ink)}
+.btn:focus-visible,.btn-ghost:focus-visible,a:focus-visible{outline:3px solid var(--caramel);outline-offset:2px}
+.or{display:flex;align-items:center;gap:12px;color:#8C7766;font-size:13px}
+.or:before,.or:after{content:"";flex:1;height:1px;background:var(--line)}
+.scan{display:flex;gap:12px;align-items:center;font-size:14px;color:var(--ink2);border:1.5px dashed var(--field);border-radius:14px;padding:12px 16px}
+.scan svg{flex:none}
+.alert{display:flex;gap:10px;align-items:flex-start;border-radius:12px;padding:12px 14px;font-size:14px;line-height:1.45}
+.alert-err{background:#F6DED8;color:#6E2017}
+.alert-info{background:#EADBC6;color:#4A3326}
+.alert svg{flex:none;margin-top:1px}
+
+/* ---- status screens (dark) ---- */
+.dark-page{min-height:100vh;display:flex;flex-direction:column;align-items:center;gap:24px;padding:36px 24px 28px;text-align:center}
+.dark-page .logo{width:150px;height:auto}
+.ring{position:relative;width:248px;height:248px;display:flex;align-items:center;justify-content:center}
+.ring svg{position:absolute;inset:0}
+.ring .arc{transition:stroke-dashoffset 1s linear}
+.ring-label{position:relative;display:flex;flex-direction:column;align-items:center;gap:2px}
+.ring-kicker{font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--soft)}
+.ring-time{font-family:var(--serif);font-size:64px;font-weight:600;line-height:1;color:var(--beige)}
+.ring-sub{font-size:13px;color:var(--soft)}
+.low .ring-kicker{color:var(--amber)}
+.online{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:var(--ok);justify-content:center}
+.online:before{content:"";width:8px;height:8px;border-radius:50%;background:var(--ok)}
+.chip{display:inline-flex;align-items:center;gap:10px;padding:7px 14px;border-radius:999px;border:1px solid var(--ink2);font-size:13px;color:#D9C7AE}
+.chip strong{color:var(--beige)}
+.enjoy{font-family:var(--serif);font-style:italic;font-weight:500;font-size:30px;line-height:1.1;color:var(--beige)}
+.card{width:100%;max-width:420px;background:var(--beige);color:var(--ink);border-radius:22px;padding:20px;display:flex;flex-direction:column;gap:12px;text-align:left}
+.card .k{font-size:12px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--brown)}
+.card .big{font-family:var(--mono);font-size:24px;letter-spacing:.12em}
+.card p{font-size:14px;line-height:1.45;color:var(--muted)}
+.card-row{display:flex;align-items:center;gap:12px}
+.card-row h1{font-size:28px;color:var(--ink)}
+.foot{margin-top:auto;font-size:13px;color:var(--soft)}
+.stack-c{display:flex;flex-direction:column;align-items:center;gap:8px}
+@media (min-width:900px){.dark-page{justify-content:center}}
+</style>
+</head>
+<body class="dark">
+<div class="dark-page">
+  <img class="logo" src="img/logo.png" alt="Don Robert Café">
+  <div class="card" style="margin-top:24px">
+    <div class="alert alert-err" role="alert"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16.5v.01"/></svg><span>$(error)</span></div>
+    <p>Try again. If it keeps happening, show this screen to the barista.</p>
+    <a class="btn" href="$(link-login-only)">Back to log in</a>
+  </div>
+  <p class="foot">Don Robert Café · Free Wi‑Fi with every drink</p>
+</div>
+</body>
+</html>

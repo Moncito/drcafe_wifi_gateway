@@ -1,0 +1,19 @@
+# Don Robert Cafe hotspot messages (shown as $(error) on login.html / error.html).
+# Same keys as MikroTik's default errors.txt; customer-facing ones reworded.
+
+internal-error = Something went wrong on our side ($(error-orig)). Please ask the barista.
+config-error = Wi-Fi setup problem ($(error-orig)). Please ask the barista.
+not-logged-in = You are not logged in yet. Enter the code on your slip.
+ippool-empty = The Wi-Fi is full right now. Please ask the barista.
+shutting-down = The Wi-Fi is restarting. Try again in a minute.
+user-session-limit = Code $(username) is already in use on the most devices it allows (solo: 1, group: 7). Log out on another device, or ask for a new slip.
+license-session-limit = The Wi-Fi is full right now ($(error-orig)). Please ask the barista.
+wrong-mac-username = Code $(username) can't be used on this device.
+chap-missing = Your browser didn't finish the login. Please try again.
+invalid-username = That code doesn't work. It may be mistyped, its time may be up, or it may be from another day. Check the slip, or ask the barista.
+invalid-mac = Code $(username) can't be used on this device.
+uptime-limit = The time on code $(username) is up. Order another drink for a new slip.
+traffic-limit = Code $(username) has used all its data.
+radius-timeout = The login server isn't answering. Please ask the barista.
+auth-in-progress = Already logging in, wait a moment and try again.
+radius-reply = $(error-orig)

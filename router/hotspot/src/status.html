@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+{{HEAD}}
+$(if refresh-timeout)<meta http-equiv="refresh" content="$(refresh-timeout-secs)">$(endif)
+<title>You're online · Don Robert Café</title>
+<style>{{STYLE}}</style>
+</head>
+<body class="dark">
+<div class="dark-page" id="page">
+  <img class="logo" src="img/logo.png" alt="Don Robert Café">
+
+  <!-- countdown (online + almost up) -->
+  <div id="ring-wrap" class="ring" role="timer" aria-live="off">
+    <svg aria-hidden="true" width="248" height="248" viewBox="0 0 248 248">
+      <circle cx="124" cy="124" r="112" fill="none" stroke="#2C221B" stroke-width="10"/>
+      <circle id="arc" class="arc" cx="124" cy="124" r="112" fill="none" stroke="#C9A27A" stroke-width="10" stroke-linecap="round" stroke-dasharray="703.7" stroke-dashoffset="0" transform="rotate(-90 124 124)"/>
+      <circle cx="124" cy="124" r="92" fill="#1E1713"/>
+    </svg>
+    <div class="ring-label">
+      <span class="ring-kicker" id="kicker">Time left</span>
+      <span class="ring-time" id="left">–:––</span>
+      <span class="ring-sub" id="ends"></span>
+    </div>
+  </div>
+
+  <!-- online -->
+  <div id="st-on" class="stack-c">
+    <div class="online">You're online</div>
+    <div class="chip" id="chip"></div>
+    <p class="enjoy">Enjoy your coffee.</p>
+  </div>
+  <div id="card-on" class="card">
+    <span class="k">Your code</span>
+    <span class="big code">$(username)</span>
+    <p id="share"></p>
+  </div>
+
+  <!-- almost up -->
+  <div id="card-low" class="card hidden">
+    <div class="card-row">
+      <svg aria-hidden="true" width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#8A5A2B" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10h13v4a6 6 0 0 1-6 6h-1a6 6 0 0 1-6-6z"/><path d="M17 11h1.5a2.5 2.5 0 0 1 0 5H17"/><path d="M8 3c-.6 1 .6 2 0 3M12 3c-.6 1 .6 2 0 3"/></svg>
+      <h1>Need a refill?</h1>
+    </div>
+    <p id="low-refill">Order another drink and you'll get a new slip with <strong>3 more hours</strong>. Enter it when this one ends.</p>
+    <p id="low-closing" class="hidden">The café closes at <strong>1:00 AM</strong>. Wi‑Fi stops for everyone then. Salamat sa pagbisita!</p>
+    <a id="low-btn" class="btn" href="$(link-logout)">Enter a new code</a>
+    <p style="text-align:center">Code <span class="code">$(username)</span> · Isa pang kape?</p>
+  </div>
+
+  <!-- time is up -->
+  <div id="card-up" class="card hidden">
+    <h1 style="font-size:34px">Your cup is <i style="font-weight:500">empty.</i></h1>
+    <p>Your time with code <span class="code">$(username)</span> is up. Order another drink to get a new slip.</p>
+    <div class="alert alert-info">{{CLOCK_SVG}}<span>Got a new slip? Each code works for 3 hours and stops at 1:00 AM closing.</span></div>
+    <a class="btn" href="$(link-logout)">Enter a new code</a>
+    <p style="text-align:center">Salamat sa pagbisita · See you again soon</p>
+  </div>
+
+  <p class="foot">Codes stop at 1:00 AM closing · <a href="$(link-logout)">Log out</a></p>
+</div>
+<script>
+{{COMMON}}
+var USER = "$(username)";
+var LEFT_S = parseRos("$(session-time-left)");
+var FULL_S = 3 * 3600;
+var LOW_S = 15 * 60;
+var start = Date.now();
+var isGroup = USER.charAt(0) === "G";
+
+el("chip").innerHTML = isGroup
+  ? 'Group code · <strong>up to 7</strong> devices'
+  : 'Solo code · <strong>this device</strong>';
+el("share").textContent = isGroup
+  ? "With friends? They can type this code on their phones too, up to 7 devices at once. Everyone shares the same 3 hours."
+  : "Keep your slip: if you get logged out, enter the same code again. The time keeps running.";
+
+function tick() {
+  var now = Date.now();
+  var toClose = msToClosing(now);
+  // end = router's time left (if it gives one), but never past 1:00 AM
+  var end = now + toClose;
+  if (LEFT_S !== null) end = Math.min(end, start + LEFT_S * 1000);
+  var left = Math.max(0, Math.round((end - now) / 1000));
+  var byClosing = LEFT_S === null || end === now + toClose;
+
+  if (left === 0) {
+    el("ring-wrap").className = "ring hidden";
+    el("st-on").className = "stack-c hidden";
+    el("card-on").className = "card hidden";
+    el("card-low").className = "card hidden";
+    el("card-up").className = "card";
+    document.title = "Time is up · Don Robert Café";
+    return;
+  }
+  var h = Math.floor(left / 3600), m = Math.floor((left % 3600) / 60);
+  var frac = Math.min(1, left / FULL_S);
+  if (LEFT_S === null && left > LOW_S) {
+    // router gives no countdown for this code (group codes): don't guess, state the rule
+    el("left").textContent = "3h";
+    el("ends").textContent = "from first use · by 1:00 AM";
+    frac = 1;
+  } else {
+    el("left").textContent = h + ":" + pad2(m);
+    el("ends").textContent = (byClosing ? "closing " : "ends ") + manilaClock(end);
+  }
+  el("arc").setAttribute("stroke-dashoffset", String(703.7 * (1 - frac)));
+  var low = left <= LOW_S;
+  el("page").className = "dark-page" + (low ? " low" : "");
+  el("kicker").textContent = low ? (byClosing ? "Closing soon" : "Almost up") : (LEFT_S === null ? "Group code" : "Time left");
+  el("arc").setAttribute("stroke", low ? "#E0A46A" : "#C9A27A");
+  el("card-low").className = low ? "card" : "card hidden";
+  // near 1:00 AM a new slip won't help: say the café is closing instead
+  el("low-refill").className = byClosing ? "hidden" : "";
+  el("low-closing").className = byClosing ? "" : "hidden";
+  el("low-btn").className = byClosing ? "btn hidden" : "btn";
+  el("card-on").className = low ? "card hidden" : "card";
+  el("st-on").className = low ? "stack-c hidden" : "stack-c";
+}
+tick();
+setInterval(tick, 5000);
+</script>
+</body>
+</html>
