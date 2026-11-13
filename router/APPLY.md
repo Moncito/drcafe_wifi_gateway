@@ -57,14 +57,13 @@ Stop at the first ❌ and send me the terminal output.
 | 6 Group countdown (optional) · 📱 **Phone A + B** | Only if you try `groupFix true`: neither device cut before 15 clock minutes, and `session-time-left` drops ~1 min per minute on both. Anything else: back to `false` and tell me. |
 | 7 QR link · 📱 **Phone A** | `http://192.168.88.1/login?username=STEST4&password=STEST4` on a not-logged-in phone → straight to "logged in"/status, no code typed. *Fail:* lands on the login page with an empty field. Tell me. |
 
-## 6. Panel access (needed before hardening)
-Hardening restricts by IP, so the panel PC's static lease has to exist and be in use first.
-```
-/import file-name=04-panel-access.local.rsc verbose=yes
-```
-Then on the **panel PC**: `ipconfig /release` → `ipconfig /renew`.
+## 6. Panel connection (cloud)
+The panel is a website (panel/DEPLOY.md). The router **checks in** to it every 20 s with the
+script `drc-cloud-sync` and a secret key kept in the router script `drc-cloud-config`.
+Nothing on the router is opened for the panel. (`04-panel-access.rsc` was for the earlier
+PC-only panel and is no longer used.)
 
-✅ Pass: the import prints the certificate fingerprint (save it for Phase 2). `ipconfig` on the panel PC shows **192.168.88.5**. `/ip dhcp-server lease print where comment="DRC panel PC"` → no `D` flag (static), status bound. The panel PC opens websites without seeing the login page. **Test 10** (curl from panel PC): `identity` returns `{"name":…}`, the user list returns JSON, the STEST5 add+delete work. The same curl from the laptop **fails** (connection refused or timeout).
+✅ Pass: Settings in the panel shows the router as *Checking in*. `/log print where message~"drc-cloud-sync"` shows no warnings.
 
 ## 7. Hardening (in Safe Mode)
 New Terminal → **Ctrl+X** (prompt shows `<SAFE>`) →
