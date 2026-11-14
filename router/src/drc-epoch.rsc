@@ -2,6 +2,13 @@
 # 1970-01-01 00:00, i.e. Manila wall time counted as if it were UTC.
 # Only used for differences (start/end of a code), so the offset does not matter.
 # Returns 0 when the clock is clearly not set (year before 2025).
+# Also returns 0 while NTP is not synchronized: this router has no battery
+# clock, so after a power cut it starts with an old saved time (seen: 20 hours
+# behind for 25 minutes). Trusting that could expire codes early or run the
+# 1 AM cleanup in the afternoon.
+:local st ""
+:do { :set st [:tostr [/system ntp client get status]] } on-error={}
+:if ($st != "synchronized") do={ :return 0 }
 # Built only from /system clock date+time, so it does not depend on :timestamp.
 # Handles both date formats: "2026-11-13" (RouterOS 7.10+) and "nov/13/2026".
 :local strip do={

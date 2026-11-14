@@ -3,7 +3,10 @@
 # Installs the Don Robert Cafe Wi-Fi scripts. Safe to re-import (replaces them).
 
 /system script remove [find where name="drc-epoch"]
-/system script add name=drc-epoch policy=read,write,test dont-require-permissions=no comment="Don Robert Cafe Wi-Fi" source=":local strip do={\r\
+/system script add name=drc-epoch policy=read,write,test dont-require-permissions=no comment="Don Robert Cafe Wi-Fi" source=":local st \"\"\r\
+    \n:do { :set st [:tostr [/system ntp client get status]] } on-error={}\r\
+    \n:if (\$st != \"synchronized\") do={ :return 0 }\r\
+    \n:local strip do={\r\
     \n  :if ([:pick \$1 0 1] = \"0\") do={ :return [:tonum [:pick \$1 1 [:len \$1]]] }\r\
     \n  :return [:tonum \$1]\r\
     \n}\r\
@@ -57,6 +60,9 @@
 
 /system script remove [find where name="drc-closing"]
 /system script add name=drc-closing policy=read,write,test dont-require-permissions=no comment="Don Robert Cafe Wi-Fi" source=":local re \"^[SG][A-HJKMNP-Z2-9]{5}\\\$\"\r\
+    \n:local st \"\"\r\
+    \n:do { :set st [:tostr [/system ntp client get status]] } on-error={}\r\
+    \n:if (\$st != \"synchronized\") do={ :log warning \"drc-closing: clock not synced yet, skipped\"; :return \"\" }\r\
     \n:local n [:len [/ip hotspot user find where name~\$re]]\r\
     \n/ip hotspot active remove [find where user~\$re]\r\
     \n/ip hotspot cookie remove [find where user~\$re]\r\
