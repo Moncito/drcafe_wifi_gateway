@@ -136,6 +136,30 @@
     counts.forEach((i) => i.addEventListener("input", upd));
   }
 
+  // ---- live print preview (same markup as previewPages in print.ts) -------------------
+  const preview = $("[data-preview]");
+  if (preview && counts.length >= 2) {
+    const lbl = (t, n) => `${t}-${String(n).padStart(3, "0")}`;
+    const nextS = Number(preview.dataset.nextS) || 1, nextG = Number(preview.dataset.nextG) || 1;
+    const draw = () => {
+      const solo = Math.min(600, Math.max(0, parseInt(counts[0].value, 10) || 0));
+      const group = Math.min(600, Math.max(0, parseInt(counts[1].value, 10) || 0));
+      const slips = [];
+      for (let i = 0; i < solo; i++) slips.push(["S", nextS + i]);
+      for (let i = 0; i < group; i++) slips.push(["G", nextG + i]);
+      const pagesN = Math.max(1, Math.ceil(slips.length / 48));
+      preview.replaceChildren(...Array.from({ length: pagesN }, (_, p) => {
+        const slice = slips.slice(p * 48, (p + 1) * 48);
+        const page = el("div", { class: "preview-page", "aria-hidden": "true" },
+          ...Array.from({ length: 48 }, (_, i) => el("div", { class: `pv${slice[i] ? (slice[i][0] === "S" ? " pv-s" : " pv-g") : ""}` })));
+        const first = slice[0], last = slice[slice.length - 1];
+        return el("div", { class: "preview-page-wrap" }, page,
+          el("span", { class: "muted small", text: `Page ${p + 1}${first ? ` · ${lbl(...first)}–${lbl(...last)}` : ""}` }));
+      }));
+    };
+    counts.forEach((i) => i.addEventListener("input", draw));
+  }
+
   // ---- "batch ready" toast when a waiting batch reaches the router -------------------
   // Pages refresh themselves while a batch is waiting; remember what was waiting.
   try {

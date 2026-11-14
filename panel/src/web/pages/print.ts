@@ -14,6 +14,8 @@ export interface PrintData {
   isAdmin: boolean;
   prints: PrintRow[];
   stock: Stock;
+  /** the next serial number for each type (serials never restart) */
+  next: { S: number; G: number };
   routerOk: boolean;
   flash: Flash;
 }
@@ -23,6 +25,29 @@ const hours = (s: number) => {
   const h = s / 3600;
   return Number.isInteger(h) ? `${h} hour${h === 1 ? "" : "s"}` : `${Math.round(s / 60)} minutes`;
 };
+
+const lbl = (t: "S" | "G", n: number) => `${t}-${String(n).padStart(3, "0")}`;
+
+/**
+ * A4 pages as they will print: 4 × 12 slips, solo first then group, with the
+ * serial range of each page. forms.js redraws it live as the counts change
+ * (same markup, see renderPreview there).
+ */
+function previewPages(solo: number, group: number, next: { S: number; G: number }): Safe {
+  const slips = [
+    ...Array.from({ length: solo }, (_, i) => ({ t: "S" as const, n: next.S + i })),
+    ...Array.from({ length: group }, (_, i) => ({ t: "G" as const, n: next.G + i })),
+  ];
+  const n = Math.max(1, pages(slips.length));
+  return html`${Array.from({ length: n }, (_, p) => {
+    const slice = slips.slice(p * SLIPS_PER_PAGE, (p + 1) * SLIPS_PER_PAGE);
+    const first = slice[0], last = slice[slice.length - 1];
+    return html`<div class="preview-page-wrap"><div class="preview-page" aria-hidden="true">${Array.from({ length: SLIPS_PER_PAGE }, (_, i) => {
+      const t = slice[i]?.t;
+      return html`<div class="pv ${t === "S" ? "pv-s" : t === "G" ? "pv-g" : ""}"></div>`;
+    })}</div><span class="muted small">Page ${p + 1}${first && last ? ` · ${lbl(first.t, first.n)}–${lbl(last.t, last.n)}` : ""}</span></div>`;
+  })}`;
+}
 
 function printRow(b: PrintRow, isAdmin: boolean, now: number): Safe {
   const expired = b.valid_until <= now;
@@ -92,7 +117,15 @@ ${flash(d.flash)}
     </form>
   </section>` : ""}
 
-  <section class="card grow-1" id="extra">
+  <div class="grow-1 stack-14">
+  ${d.isAdmin ? html`
+  <section class="stack-14">
+    <h2 style="margin:0">Preview</h2>
+    <div class="preview-pages" data-preview data-next-s="${d.next.S}" data-next-g="${d.next.G}">${previewPages(s.soloPerDay, s.groupPerDay, d.next)}</div>
+    <div class="legend"><span><i class="sw sw-morning"></i>Solo slip</span><span><i class="sw sw-night"></i>Group slip</span></div>
+  </section>` : ""}
+
+  <section class="card" id="extra">
     <h2>Running low?</h2>
     <p class="muted">Print a few more slips. Serials continue from the last one.</p>
     <div class="actions">
@@ -116,6 +149,7 @@ ${flash(d.flash)}
       </form>
     </details>` : ""}
   </section>
+  </div>
 </div>
 
 <section class="card">

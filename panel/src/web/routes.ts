@@ -197,11 +197,15 @@ export function buildRoutes(ctx: Ctx) {
     const db = dbOf(res);
     const now = Date.now();
     const date = businessDate(now);
-    const [settings, prints, st, sync] = await Promise.all([getSettings(db), recentPrints(db, now), stock(db, date, now), getRouterStatus(db, now)]);
+    const [settings, prints, st, sync, maxes] = await Promise.all([
+      getSettings(db), recentPrints(db, now), stock(db, date, now), getRouterStatus(db, now),
+      db.all<{ type: "S" | "G"; m: number }>("SELECT type, MAX(serial) AS m FROM codes GROUP BY type"),
+    ]);
+    const next = { S: (maxes.find((x) => x.type === "S")?.m ?? 0) + 1, G: (maxes.find((x) => x.type === "G")?.m ?? 0) + 1 };
     res.send(appPage({
       title: "Print slips", staff: me(res), active: "print",
       refreshSeconds: prints.some((b) => b.state === "pending") ? 8 : undefined,
-      main: printMain({ now, settings, isAdmin: me(res).role === "admin", prints, stock: st, routerOk: sync.ok, flash: readFlash(req) }),
+      main: printMain({ now, settings, isAdmin: me(res).role === "admin", prints, stock: st, next, routerOk: sync.ok, flash: readFlash(req) }),
     }).value);
   });
 
