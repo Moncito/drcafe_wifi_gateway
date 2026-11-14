@@ -96,7 +96,7 @@ export class MockRouter {
     this.save();
     const epoch = msToRouterEpoch(this.now());
     return formatReport({
-      info: { identity: "hAP (mock)", board: "hAP ax S (mock)", version: "7.25.1 (mock)", backupComment: "drc last backup 2026-11-14 01:15:02 drc-auto-sat", groupDevices: "7", rateLimit: "5M/5M", idleTimeout: "5m" },
+      info: { identity: "hAP (mock)", board: "hAP ax S (mock)", version: "7.25.1 (mock)", backupComment: "drc last backup 2026-11-14 01:15:02 drc-auto-sat", groupDevices: "7", rateLimit: "5M/5M", idleTimeout: "5m", uptime: "3d04:12:09", clock: "synchronized" },
       users: this.state.users.filter((u) => CODE_RE.test(u.name)),
       active: this.state.active.map((a) => {
         const st = parseRouterComment(this.state.users.find((u) => u.name === a.user)?.comment);

@@ -27,4 +27,8 @@ export interface RouterInfo {
   groupDevices: string;
   rateLimit: string;
   idleTimeout: string;
+  /** Router uptime as RouterOS prints it ("1d02:03:04", "28m36s"); "" from older scripts */
+  uptime: string;
+  /** NTP client status ("synchronized" when the router clock is right); "" from older scripts */
+  clock: string;
 }

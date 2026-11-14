@@ -5,7 +5,7 @@
  *
  * Router -> panel (POST /api/router/sync):
  *   v1
- *   i|identity|board|version|backupComment|groupDevices|rateLimit|idleTimeout
+ *   i|identity|board|version|backupComment|groupDevices|rateLimit|idleTimeout|uptime|ntpStatus
  *   u|CODE|disabled(0/1)|comment-if-used          one per S/G code on the router
  *   a|CODE|address|mac|uptime|sessionTimeLeft|hostName    one per logged-in device
  *
@@ -32,7 +32,7 @@ export function parseReport(text: string): RouterReport {
   const lines = text.replace(/\r/g, "").split("\n").filter((l) => l.length > 0);
   if (lines[0] !== "v1") throw new ProtocolError("unknown report version");
   const report: RouterReport = {
-    info: { identity: "", board: "", version: "", backupComment: "", groupDevices: "", rateLimit: "", idleTimeout: "" },
+    info: { identity: "", board: "", version: "", backupComment: "", groupDevices: "", rateLimit: "", idleTimeout: "", uptime: "", clock: "" },
     users: [],
     active: [],
   };
@@ -41,7 +41,7 @@ export function parseReport(text: string): RouterReport {
     if (f[0] === "i") {
       report.info = {
         identity: f[1] ?? "", board: f[2] ?? "", version: f[3] ?? "", backupComment: f[4] ?? "",
-        groupDevices: f[5] ?? "", rateLimit: f[6] ?? "", idleTimeout: f[7] ?? "",
+        groupDevices: f[5] ?? "", rateLimit: f[6] ?? "", idleTimeout: f[7] ?? "", uptime: f[8] ?? "", clock: f[9] ?? "",
       };
     } else if (f[0] === "u" && CODE_RE.test(f[1] ?? "")) {
       report.users.push({ id: f[1]!, name: f[1]!, disabled: f[2] === "1", comment: f[3] ?? "", profile: "" });
@@ -84,7 +84,7 @@ export function parseCommands(text: string): RouterCommand[] {
 /** Build a report the way the router script does (used by the mock router and tests). */
 export function formatReport(r: RouterReport): string {
   const i = r.info;
-  const lines = ["v1", ["i", i.identity, i.board, i.version, i.backupComment, i.groupDevices, i.rateLimit, i.idleTimeout].map(clean).join("|")];
+  const lines = ["v1", ["i", i.identity, i.board, i.version, i.backupComment, i.groupDevices, i.rateLimit, i.idleTimeout, i.uptime, i.clock].map(clean).join("|")];
   for (const u of r.users) lines.push(["u", u.name, u.disabled ? "1" : "0", u.comment.includes("start=") ? clean(u.comment) : ""].join("|"));
   for (const a of r.active) lines.push(["a", a.user, a.address, a.mac, a.uptime, a.sessionTimeLeft, clean(a.hostName)].join("|"));
   return lines.join("\n") + "\n";

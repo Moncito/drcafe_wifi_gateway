@@ -8,18 +8,19 @@ import {
   createStaff, listStaff, login, logout, sessionStaff, staffCount, updateStaff, type Role, type Staff,
 } from "../services/auth.ts";
 import {
-  batchesForDate, codesBySerialRange, codesForBatch, createBatch, findBySerial, findCode, getBatch, isAdvance, markPrinted,
+  batchesForDate, codesBySerialRange, codesForBatch, createBatch, dailyBatch, findBySerial, findCode, getBatch, isAdvance, markPrinted,
   pastDays, UserError, voidCodes, type CodeRow,
 } from "../services/batches.ts";
 import { getRouterStatus, handleRouterReport, queueKick, tokenMatches } from "../services/routerlink.ts";
 import { getSettings, saveSettings } from "../services/settings.ts";
-import { dayCounts, usageByHour } from "../services/stats.ts";
+import { dayCounts, drinkCounts, report, routerBacklog, saveDrinkCount, usageByHour, usualByHour } from "../services/stats.ts";
 import { addDays, businessDate, closingMs, formatDateShort, isClosedWindow } from "../time.ts";
 import { html } from "./html.ts";
 import { appPage, type Flash } from "./layout.ts";
 import { loginPage, setupPage } from "./pages/login.ts";
 import { lookupMain } from "./pages/lookup.ts";
 import { printMain } from "./pages/print.ts";
+import { reportsMain } from "./pages/reports.ts";
 import { settingsMain } from "./pages/settings.ts";
 import { sheetPage } from "./pages/sheet.ts";
 import { todayMain } from "./pages/today.ts";
@@ -46,7 +47,10 @@ const safeBack = (v: unknown, fallback: string) => {
   const s = str(v);
   return s.startsWith("/") && !s.startsWith("//") ? s : fallback;
 };
-const withMsg = (path: string, kind: "ok" | "err", text: string) => `${path}${path.includes("?") ? "&" : "?"}${kind}=${msg(text)}`;
+const withMsg = (to: string, kind: "ok" | "err", text: string) => {
+  const [path, hash] = to.split("#") as [string, string | undefined];
+  return `${path}${path.includes("?") ? "&" : "?"}${kind}=${msg(text)}${hash ? `#${hash}` : ""}`;
+};
 
 export function buildRoutes(ctx: Ctx) {
   const { cfg } = ctx;
@@ -147,14 +151,19 @@ export function buildRoutes(ctx: Ctx) {
     const batches = await batchesForDate(db, date);
     const daily = batches.find((b) => b.kind === "daily" && b.state !== "void");
     const batchBy = daily ? (await db.get<{ n: string }>("SELECT display_name AS n FROM staff WHERE id = ?", daily.printed_by ?? daily.created_by ?? 0))?.n ?? null : null;
-    const [{ bars, shifts }, counts, sync, recent] = await Promise.all([
+    const tomorrowDate = addDays(date, 1);
+    const [{ bars, shifts }, counts, sync, recent, usual, backlog, tomorrowBatch] = await Promise.all([
       usageByHour(db, date), dayCounts(db, date), getRouterStatus(db, now),
       recentActivity(db, 40, ["first_login", "expired", "void", "disconnect", "batch_created", "batch_printed"]),
+      usualByHour(db, date), routerBacklog(db, date), dailyBatch(db, tomorrowDate),
     ]);
     const activity = recent.filter((a) => businessDate(a.at) === date).slice(0, 10);
     res.send(appPage({
       title: "Today", staff: me(res), active: "today", refreshSeconds: 30,
-      main: todayMain({ now, date, counts, bars, shifts, batches, batchBy, activity, sync, isAdmin: me(res).role === "admin" }),
+      main: todayMain({
+        now, date, counts, bars, usual, shifts, batches, batchBy, backlog, tomorrow: { date: tomorrowDate, batch: tomorrowBatch ?? null },
+        activity, sync, isAdmin: me(res).role === "admin",
+      }),
     }).value);
   });
 
@@ -237,6 +246,37 @@ export function buildRoutes(ctx: Ctx) {
     const reason = `${serialLabel(type, from)} to ${serialLabel(type, to)}${str(req.body.reason) ? ` · ${str(req.body.reason).slice(0, 80)}` : ""}`;
     const out = await voidCodes(db, codes, me(res).id, reason);
     res.redirect(withMsg(back, "ok", voidSummary(out.voided.length)));
+  });
+
+  // ---- Reports (owner) ---------------------------------------------------------
+  r.get("/reports", adminOnly, async (req, res) => {
+    const db = dbOf(res);
+    const now = Date.now();
+    const range = str(req.query.range) === "30" ? 30 : 7;
+    const last = businessDate(now);
+    const rep = await report(db, last, range);
+    const drinks = await drinkCounts(db, addDays(last, -6), last);
+    res.send(appPage({
+      title: "Reports", staff: me(res), active: "reports",
+      main: reportsMain({ now, today: last, range, report: rep, drinks, flash: readFlash(req) }),
+    }).value);
+  });
+
+  r.post("/reports/drinks", adminOnly, async (req, res) => {
+    const db = dbOf(res);
+    const today = businessDate(Date.now());
+    const oldest = addDays(today, -6);
+    let saved = 0;
+    for (const [key, val] of Object.entries(req.body as Record<string, unknown>)) {
+      const m = key.match(/^d_(\d{4}-\d{2}-\d{2})_(morning|night)$/);
+      if (!m || m[1]! < oldest || m[1]! > today) continue;
+      const v = str(val).trim();
+      const n = v === "" ? null : int(v);
+      if (n !== null && !(n >= 0 && n <= 5000)) return res.redirect(withMsg("/reports#drinks", "err", "Drink counts must be numbers from 0 to 5000."));
+      await saveDrinkCount(db, m[1]!, m[2] as "morning" | "night", n, me(res).id);
+      saved++;
+    }
+    res.redirect(withMsg("/reports#drinks", "ok", saved ? "Drink counts saved." : "Nothing to save."));
   });
 
   // ---- Look up & devices ---------------------------------------------------

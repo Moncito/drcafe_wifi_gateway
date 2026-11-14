@@ -27,7 +27,7 @@ function deviceName(a: RouterActive): string {
 }
 
 function disconnectBtn(a: RouterActive, q: string, small = false): Safe {
-  return html`<form method="post" action="/devices/disconnect" data-confirm="Disconnect this device? It happens at the router's next check-in (about 20 seconds). It can log in again with the same code while time is left.">
+  return html`<form method="post" action="/devices/disconnect" data-confirm="It is disconnected at the router's next check-in (about 20 seconds). It can log in again with the same code while time is left." data-confirm-title="Disconnect this device?" data-confirm-ok="Disconnect" data-confirm-facts="${JSON.stringify([["Device", deviceName(a)], ["Code", a.user]])}">
     <input type="hidden" name="id" value="${a.id}"><input type="hidden" name="user" value="${a.user}"><input type="hidden" name="back" value="${back(q)}">
     <button class="btn btn-light${small ? " btn-sm" : ""}" type="submit">Disconnect</button></form>`;
 }
@@ -63,7 +63,7 @@ ${c ? html`
       ${typePill(c.type)}
       ${statusBadge(c.status)}
     </div>
-    ${d.isAdmin && c.status !== "void" ? html`<form method="post" action="/codes/${c.code}/void" data-confirm="Void ${c.code}? It stops working now and its devices are disconnected.">
+    ${d.isAdmin && c.status !== "void" ? html`<form method="post" action="/codes/${c.code}/void" data-confirm="It stops working right away and its devices are disconnected. This can't be undone." data-confirm-title="Void ${c.code}?" data-confirm-ok="Void code" data-danger>
       <input type="hidden" name="back" value="${back(d.q)}">
       <button class="btn btn-danger-outline" type="submit">Void this code</button></form>` : ""}
   </div>

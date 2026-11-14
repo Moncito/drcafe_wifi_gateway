@@ -111,6 +111,16 @@ CREATE TABLE IF NOT EXISTS router_state (
   info        TEXT NOT NULL,
   active      TEXT NOT NULL
 );
+
+-- Drinks sold per shift, typed in from the POS on the Reports page.
+CREATE TABLE IF NOT EXISTS shift_drinks (
+  business_date TEXT NOT NULL,
+  shift         TEXT NOT NULL CHECK (shift IN ('morning', 'night')),
+  drinks        INTEGER NOT NULL,
+  staff_id      INTEGER,
+  saved_at      INTEGER NOT NULL,
+  PRIMARY KEY (business_date, shift)
+);
 `;
 
 function wrap(exec: (sql: string, args: InValue[]) => Promise<{ rows: unknown[]; lastInsertRowid?: bigint; rowsAffected: number }>): Omit<DB, "tx"> {

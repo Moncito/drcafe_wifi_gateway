@@ -55,7 +55,7 @@ function batchCard(b: PrintData["batches"][number], isAdmin: boolean, ahead: boo
   const printable = b.state === "on_router" || b.state === "printed" || (ahead && b.state === "pending");
   const stateText = ahead && b.state === "pending" ? "Ready to print · works from 5:00 AM" : STATE_TEXT[b.state];
   return html`
-  <div class="batch-row">
+  <div class="batch-row" data-batch="${b.id}" data-state="${b.state}" data-count="${live.length}" data-sheet="/batches/${b.id}/sheet">
     <div class="stack-4">
       <strong>${b.kind === "daily" ? "Daily batch" : "Extra slips"} · ${b.solo_count} S + ${b.group_count} G</strong>
       <span class="muted small">Created ${formatClock(b.created_at)}${b.by ? ` by ${b.by}` : ""} · ${p} page${p > 1 ? "s" : ""} · ${hours(b.dur_seconds)} per code${live.length !== n ? ` · ${n - live.length} voided` : ""}</span>

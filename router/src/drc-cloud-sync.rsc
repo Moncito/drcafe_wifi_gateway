@@ -56,7 +56,9 @@
 :do { :set rl [/ip hotspot user profile get [find where name="solo-3h"] rate-limit] } on-error={}
 :local it ""
 :do { :set it [/ip hotspot get [:pick [/ip hotspot find] 0] idle-timeout] } on-error={}
-:local body ("v1" . $nl . "i|" . [/system identity get name] . "|" . [/system resource get board-name] . "|" . [/system resource get version] . "|" . $bc . "|" . $gd . "|" . $rl . "|" . $it . $nl)
+:local ntp ""
+:do { :set ntp [:tostr [/system ntp client get status]] } on-error={}
+:local body ("v1" . $nl . "i|" . [/system identity get name] . "|" . [/system resource get board-name] . "|" . [/system resource get version] . "|" . $bc . "|" . $gd . "|" . $rl . "|" . $it . "|" . [:tostr [/system resource get uptime]] . "|" . $ntp . $nl)
 :foreach id in=[/ip hotspot user find where name~$re] do={
   :local c [:tostr [/ip hotspot user get $id comment]]
   :if ([:typeof [:find $c "start="]] = "nil") do={ :set c "" }
