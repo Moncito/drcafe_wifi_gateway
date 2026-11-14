@@ -142,6 +142,16 @@ async function migrate(client: Client) {
   if (!c.has("issued_by")) await client.execute("ALTER TABLE codes ADD COLUMN issued_by INTEGER");
   if (!(await cols("batches")).has("pool")) await client.execute("ALTER TABLE batches ADD COLUMN pool INTEGER NOT NULL DEFAULT 0");
   await client.execute("CREATE INDEX IF NOT EXISTS codes_live ON codes(status, valid_until)");
+  // Owner's choice (2026-11-14): slips printed on the day of the change, under the old
+  // "that day only" rule, carry over for 30 days like new ones. Runs once.
+  const done = await client.execute("SELECT 1 FROM settings WHERE key = 'migr_extend_20261114'");
+  if (!done.rows.length) {
+    await client.execute(`UPDATE codes SET valid_until = (CAST(strftime('%s', business_date, '+30 days') AS INTEGER) + 17 * 3600) * 1000
+      WHERE status = 'unused' AND business_date >= '2026-11-14'
+        AND valid_until = (CAST(strftime('%s', business_date) AS INTEGER) + 17 * 3600) * 1000
+        AND batch_id IN (SELECT id FROM batches WHERE pool = 0)`);
+    await client.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('migr_extend_20261114', '1')");
+  }
 }
 
 function wrap(exec: (sql: string, args: InValue[]) => Promise<{ rows: unknown[]; lastInsertRowid?: bigint; rowsAffected: number }>): Omit<DB, "tx"> {
