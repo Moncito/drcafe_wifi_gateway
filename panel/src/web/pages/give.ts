@@ -24,32 +24,36 @@ const wifiQrText = (ssid: string) => `WIFI:T:nopass;S:${ssid.replace(/([\\;,:"])
 export async function giveMain(d: GiveData): Promise<Safe> {
   if (d.shown) {
     const c = d.shown;
-    const [loginQr, joinQr] = await Promise.all([qr(qrLoginUrl(d.qrBase, c.code)), qr(wifiQrText(d.wifiName))]);
+    const [joinQr, loginQr] = await Promise.all([qr(wifiQrText(d.wifiName)), qr(qrLoginUrl(d.qrBase, c.code))]);
+    const kind = c.type === "G" ? "Group · up to 7 phones" : "1 phone";
     return html`
-<div class="page-head">
-  <div class="stack-4">
-    <span class="eyebrow">Show this screen to the customer</span>
-    <h1 class="title">Wi‑Fi for your customer</h1>
+<section class="cust" aria-label="Wi-Fi for the customer">
+  <div class="cust-head">
+    <span class="cust-eyebrow">Don Robert Café</span>
+    <h1 class="cust-title">Free Wi‑Fi · 3 hours</h1>
+    <span class="cust-kind">${kind}</span>
   </div>
-  <div class="actions"><a class="btn btn-primary btn-lg" href="/give">Done · give another</a></div>
-</div>
-<section class="card give-card">
-  <div class="give-steps">
-    <div class="give-step give-step-small">
-      <span class="give-n">1</span>
-      <div class="give-qr give-qr-small" role="img" aria-label="QR code to join ${d.wifiName}">${raw(joinQr)}</div>
-      <p><strong>Join the Wi‑Fi</strong><br>Scan with the phone camera, or pick <strong>${d.wifiName}</strong> in Wi‑Fi settings.</p>
-    </div>
-    <div class="give-step">
-      <span class="give-n">2</span>
-      <div class="give-qr" role="img" aria-label="QR code to log in with ${c.code}">${raw(loginQr)}</div>
-      <p><strong>Then scan to log in</strong>, or type the code when the login page opens:</p>
-      <span class="give-code mono">${c.code}</span>
-      <span class="muted small">${c.type === "G" ? "Group code · up to 7 devices" : "Solo code · 1 device"} · 3 hours from first login · works until 1:00 AM tonight · ${serialLabel(c.type, c.serial)}</span>
-    </div>
+  <div class="cust-body">
+    <div class="cust-qr" role="img" aria-label="QR code to join ${d.wifiName}">${raw(joinQr)}</div>
+    <ol class="cust-steps">
+      <li><span class="cust-n">1</span><div><strong>Scan with your camera</strong><span>to connect to <b>${d.wifiName}</b></span></div></li>
+      <li><span class="cust-n">2</span><div><strong>A login page opens. Enter:</strong><span class="cust-code mono" aria-label="Code ${c.code.split("").join(" ")}">${c.code}</span></div></li>
+    </ol>
+  </div>
+  <div class="cust-foot">
+    <details class="cust-help">
+      <summary>Login page didn't open?</summary>
+      <div class="cust-help-body">
+        <div class="cust-qr cust-qr-small" role="img" aria-label="QR code to log in with ${c.code}">${raw(loginQr)}</div>
+        <p>Make sure you're on <b>${d.wifiName}</b>, then scan this to log in. Or open any website and enter the code.</p>
+      </div>
+    </details>
   </div>
 </section>
-<p class="muted small">The code is also on the customer's phone after login. If they lose it, look it up under Look up &amp; devices.</p>
+<div class="cust-staff">
+  <span class="muted small">Staff: ${serialLabel(c.type, c.serial)} · works until 1:00 AM tonight · look it up under Look up &amp; devices</span>
+  <a class="btn btn-primary btn-lg" href="/give">Done · give another</a>
+</div>
 <script src="/static/js/forms.js"></script>`;
   }
 
