@@ -111,10 +111,34 @@ test("batch: created pending, router adds at check-in, then printable; no duplic
   } finally { cleanup(); }
 });
 
-test("batch: refused in the 1–5 AM closed window", async () => {
+test("batch: today's refused in the 1–5 AM closed window", async () => {
   const { db, staffId, cleanup } = await setup();
   try {
-    await assert.rejects(createBatch(db, { kind: "daily", solo: 1, group: 0, requestId: reqId(), staffId, now: Date.UTC(2026, 10, 14, 18, 0) }), /closed/);
+    await assert.rejects(createBatch(db, { kind: "daily", solo: 1, group: 0, requestId: reqId(), staffId, now: Date.UTC(2026, 10, 14, 18, 0) }), /closing/);
+  } finally { cleanup(); }
+});
+
+test("batch ahead: tomorrow's slips print at once, survive closing, reach the router at 5 AM", async () => {
+  const { db, router, staffId, checkIn, setNow, cleanup } = await setup();
+  try {
+    const t10pm = Date.UTC(2026, 10, 14, 14, 0); // Sat 10:00 PM
+    setNow(t10pm);
+    const b = await createBatch(db, { kind: "daily", day: "tomorrow", solo: 3, group: 1, requestId: reqId(), staffId, now: t10pm });
+    assert.equal(b.business_date, "2026-11-15");
+    await markPrinted(db, b.id, staffId, t10pm); // printable before the router has it
+    assert.equal((await getBatch(db, b.id))!.state, "printed");
+    await checkIn();
+    assert.equal(router.users().length, 0, "not added on the day before");
+    // made again at 2 AM (closed window): "tomorrow" is the same café day, so it's a duplicate
+    const t2am = Date.UTC(2026, 10, 14, 18, 0);
+    await assert.rejects(createBatch(db, { kind: "daily", day: "tomorrow", solo: 1, group: 0, requestId: reqId(), staffId, now: t2am }), /already exists/);
+    setNow(t2am);
+    await checkIn();
+    assert.equal(router.users().length, 0, "nothing added in the closed window");
+    setNow(Date.UTC(2026, 10, 14, 21, 1)); // Sun 5:01 AM
+    await checkIn();
+    assert.equal(router.users().length, 4, "added when its day starts");
+    assert.equal((await getBatch(db, b.id))!.state, "printed");
   } finally { cleanup(); }
 });
 

@@ -8,13 +8,13 @@ import {
   createStaff, listStaff, login, logout, sessionStaff, staffCount, updateStaff, type Role, type Staff,
 } from "../services/auth.ts";
 import {
-  batchesForDate, codesBySerialRange, codesForBatch, createBatch, findBySerial, findCode, getBatch, markPrinted,
+  batchesForDate, codesBySerialRange, codesForBatch, createBatch, findBySerial, findCode, getBatch, isAdvance, markPrinted,
   pastDays, UserError, voidCodes, type CodeRow,
 } from "../services/batches.ts";
 import { getRouterStatus, handleRouterReport, queueKick, tokenMatches } from "../services/routerlink.ts";
 import { getSettings, saveSettings } from "../services/settings.ts";
 import { dayCounts, usageByHour } from "../services/stats.ts";
-import { businessDate, closingMs, isClosedWindow } from "../time.ts";
+import { addDays, businessDate, closingMs, formatDateShort, isClosedWindow } from "../time.ts";
 import { html } from "./html.ts";
 import { appPage, type Flash } from "./layout.ts";
 import { loginPage, setupPage } from "./pages/login.ts";
@@ -162,27 +162,35 @@ export function buildRoutes(ctx: Ctx) {
   r.get("/print", async (req, res) => {
     const db = dbOf(res);
     const now = Date.now();
-    const date = businessDate(now);
+    const closed = isClosedWindow(now);
+    // after the 1:00 AM closing only tomorrow can be printed
+    const day: "today" | "tomorrow" = closed || str(req.query.day) === "tomorrow" ? "tomorrow" : "today";
+    const date = day === "tomorrow" ? addDays(businessDate(now), 1) : businessDate(now);
     const staffNames = new Map((await listStaff(db)).map((s) => [s.id, s.display_name]));
     const batches = await Promise.all((await batchesForDate(db, date)).map(async (b) => ({ ...b, codes: await codesForBatch(db, b.id), by: staffNames.get(b.created_by ?? 0) ?? null })));
     const [settings, history, sync] = await Promise.all([getSettings(db), pastDays(db, 14), getRouterStatus(db, now)]);
     res.send(appPage({
       title: "Print slips", staff: me(res), active: "print",
-      refreshSeconds: batches.some((b) => b.state === "pending") ? 8 : undefined,
-      main: printMain({ date, closed: isClosedWindow(now), settings, isAdmin: me(res).role === "admin", batches, history, routerOk: sync.ok, flash: readFlash(req) }),
+      refreshSeconds: day === "today" && batches.some((b) => b.state === "pending") ? 8 : undefined,
+      main: printMain({ date, day, todayDate: businessDate(now), closed, settings, isAdmin: me(res).role === "admin", batches, history, routerOk: sync.ok, flash: readFlash(req) }),
     }).value);
   });
 
   r.post("/batches", async (req, res) => {
     const kind = str(req.body.kind) === "daily" ? "daily" : "extra";
-    if (kind === "daily" && me(res).role !== "admin") return res.redirect(withMsg("/print", "err", "Only the owner/admin makes the daily batch."));
+    const day = str(req.body.day) === "tomorrow" ? "tomorrow" : "today";
+    const back = day === "tomorrow" ? "/print?day=tomorrow" : "/print";
+    if (kind === "daily" && me(res).role !== "admin") return res.redirect(withMsg(back, "err", "Only the owner/admin makes the daily batch."));
     const requestId = str(req.body.requestId);
-    if (!/^[0-9a-f-]{36}$/.test(requestId)) return res.redirect(withMsg("/print", "err", "Form expired. Please try again."));
+    if (!/^[0-9a-f-]{36}$/.test(requestId)) return res.redirect(withMsg(back, "err", "Form expired. Please try again."));
     try {
-      const batch = await createBatch(dbOf(res), { kind, solo: int(req.body.solo), group: int(req.body.group), requestId, staffId: me(res).id });
-      res.redirect(withMsg("/print", "ok", `${batch.solo_count + batch.group_count} codes created. The router adds them at its next check-in; the Print button appears when all are on the router.`));
+      const batch = await createBatch(dbOf(res), { kind, day, solo: int(req.body.solo), group: int(req.body.group), requestId, staffId: me(res).id });
+      const n = batch.solo_count + batch.group_count;
+      res.redirect(withMsg(back, "ok", isAdvance(batch)
+        ? `${n} slips for ${formatDateShort(batch.business_date)} created. You can print them now; they start working at 5:00 AM that day.`
+        : `${n} codes created. The router adds them at its next check-in; the Print button appears when all are on the router.`));
     } catch (e) {
-      if (e instanceof UserError) return res.redirect(withMsg("/print", "err", e.message));
+      if (e instanceof UserError) return res.redirect(withMsg(back, "err", e.message));
       throw e;
     }
   });
@@ -190,8 +198,9 @@ export function buildRoutes(ctx: Ctx) {
   r.get("/batches/:id/sheet", async (req, res) => {
     const db = dbOf(res);
     const batch = await getBatch(db, int(req.params.id));
-    if (!batch || batch.business_date !== businessDate(Date.now())) return res.redirect(withMsg("/print", "err", "Only today's slips can be printed."));
-    if (batch.state === "pending") return res.redirect(withMsg("/print", "err", "Not all codes are on the router yet. Wait for the router's next check-in."));
+    const now = Date.now();
+    if (!batch || (batch.business_date !== businessDate(now) && batch.business_date !== addDays(businessDate(now), 1))) return res.redirect(withMsg("/print", "err", "Only today's and tomorrow's slips can be printed."));
+    if (batch.state === "pending" && !isAdvance(batch, now)) return res.redirect(withMsg("/print", "err", "Not all codes are on the router yet. Wait for the router's next check-in."));
     if (batch.state === "void") return res.redirect(withMsg("/print", "err", "This batch was voided."));
     const page = int(req.query.page);
     res.send((await sheetPage({ batch, codes: await codesForBatch(db, batch.id), wifiName: cfg.wifiName, qrBase: cfg.qrLoginUrl, onlyPage: Number.isNaN(page) ? undefined : page })).value);
@@ -210,20 +219,24 @@ export function buildRoutes(ctx: Ctx) {
     const db = dbOf(res);
     const batch = await getBatch(db, int(req.params.id));
     if (!batch) return res.redirect("/print");
+    const back = isAdvance(batch) ? "/print?day=tomorrow" : "/print";
     const out = await voidCodes(db, await codesForBatch(db, batch.id), me(res).id, `batch #${batch.id} voided`);
-    res.redirect(withMsg("/print", "ok", voidSummary(out.voided.length)));
+    res.redirect(withMsg(back, "ok", voidSummary(out.voided.length)));
   });
 
   r.post("/void-range", adminOnly, async (req, res) => {
     const db = dbOf(res);
     const type = str(req.body.type) === "G" ? "G" : "S";
     const from = int(req.body.from), to = int(req.body.to);
-    if (!(from >= 1 && to >= from)) return res.redirect(withMsg("/print", "err", "Enter a serial range like 41 to 60."));
-    const codes = await codesBySerialRange(db, businessDate(Date.now()), type, from, to);
-    if (!codes.length) return res.redirect(withMsg("/print", "err", `No ${type} slips ${from}–${to} today.`));
+    const tomorrow = str(req.body.day) === "tomorrow";
+    const back = tomorrow ? "/print?day=tomorrow" : "/print";
+    if (!(from >= 1 && to >= from)) return res.redirect(withMsg(back, "err", "Enter a serial range like 41 to 60."));
+    const date = tomorrow ? addDays(businessDate(Date.now()), 1) : businessDate(Date.now());
+    const codes = await codesBySerialRange(db, date, type, from, to);
+    if (!codes.length) return res.redirect(withMsg(back, "err", `No ${type} slips ${from}–${to} for ${formatDateShort(date)}.`));
     const reason = `${serialLabel(type, from)} to ${serialLabel(type, to)}${str(req.body.reason) ? ` · ${str(req.body.reason).slice(0, 80)}` : ""}`;
     const out = await voidCodes(db, codes, me(res).id, reason);
-    res.redirect(withMsg("/print", "ok", voidSummary(out.voided.length)));
+    res.redirect(withMsg(back, "ok", voidSummary(out.voided.length)));
   });
 
   // ---- Look up & devices ---------------------------------------------------

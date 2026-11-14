@@ -1,7 +1,7 @@
 import QRCode from "qrcode";
 import { qrLoginUrl, serialLabel } from "../../codes.ts";
 import type { Batch, CodeRow } from "../../services/batches.ts";
-import { formatDateLong } from "../../time.ts";
+import { formatDateLong, formatDateShort } from "../../time.ts";
 import { html, raw, type Safe } from "../html.ts";
 import { SLIPS_PER_PAGE } from "./print.ts";
 
@@ -23,6 +23,8 @@ export async function sheetPage(opts: { batch: Batch; codes: CodeRow[]; wifiName
   const qrs = new Map<string, string>();
   for (const c of codes) qrs.set(c.code, await qrSvg(qrLoginUrl(opts.qrBase, c.code)));
   const dateLabel = formatDateLong(opts.batch.business_date);
+  // each slip names its day, so slips printed ahead are not handed out early
+  const slipDate = formatDateShort(opts.batch.business_date);
 
   const sheets = pageNums.map((p) => {
     const slice = codes.slice((p - 1) * SLIPS_PER_PAGE, p * SLIPS_PER_PAGE);
@@ -44,7 +46,7 @@ export async function sheetPage(opts: { batch: Batch; codes: CodeRow[]; wifiName
           <div class="slip-top"><span class="slip-label">${c.type === "S" ? "SOLO" : "GROUP · 7"}</span><span class="slip-serial">${serialLabel(c.type, c.serial)}</span></div>
           <span class="slip-code">${c.code}</span>
           <span class="slip-small slip-wifi">${opts.wifiName}</span>
-          <span class="slip-small"><strong>${durText(c.dur_seconds)}</strong> · today until 1:00 AM</span>
+          <span class="slip-small"><strong>${durText(c.dur_seconds)}</strong> · ${slipDate} until 1 AM</span>
         </div>
       </div>`;
     })}

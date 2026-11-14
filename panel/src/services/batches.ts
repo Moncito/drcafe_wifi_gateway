@@ -1,6 +1,6 @@
 import { randomCode, serialLabel, type CodeStatus, type CodeType } from "../codes.ts";
 import type { DB } from "../db.ts";
-import { businessDate, isClosedWindow } from "../time.ts";
+import { addDays, businessDate, formatDateShort, isClosedWindow } from "../time.ts";
 import { audit } from "./audit.ts";
 import { getSettings } from "./settings.ts";
 
@@ -72,18 +72,17 @@ export function codesBySerialRange(db: DB, date: string, type: CodeType, from: n
  */
 export async function createBatch(
   db: DB,
-  opts: { kind: "daily" | "extra"; solo: number; group: number; requestId: string; staffId: number; now?: number },
+  opts: { kind: "daily" | "extra"; solo: number; group: number; requestId: string; staffId: number; day?: "today" | "tomorrow"; now?: number },
 ): Promise<Batch> {
   const now = opts.now ?? Date.now();
   const same = await db.get<Batch>("SELECT * FROM batches WHERE request_id = ?", opts.requestId);
   if (same) return same;
 
-  if (isClosedWindow(now)) throw new UserError("The café is closed (1:00–5:00 AM). Codes made now would be deleted by the router. Make the batch after 5:00 AM.");
-  const date = businessDate(now);
+  const date = batchDate(opts.day ?? "today", now);
   const solo = Math.trunc(opts.solo), group = Math.trunc(opts.group);
   if (!(solo >= 0 && group >= 0 && solo <= MAX_PER_TYPE && group <= MAX_PER_TYPE)) throw new UserError(`Counts must be between 0 and ${MAX_PER_TYPE}.`);
   if (solo + group === 0) throw new UserError("Choose at least one slip.");
-  if (opts.kind === "daily" && (await dailyBatch(db, date))) throw new UserError("Today's batch already exists. Use “Ran out today?” for extra slips, or reprint a page.");
+  if (opts.kind === "daily" && (await dailyBatch(db, date))) throw new UserError(`The batch for ${formatDateShort(date)} already exists. Use “Ran out?” for extra slips, or reprint a page.`);
 
   const dur = (await getSettings(db)).durSeconds;
   return db.tx(async (t) => {
@@ -117,6 +116,24 @@ export async function createBatch(
   });
 }
 
+/**
+ * The café day a new batch is for. Tomorrow's slips can be made and printed at
+ * any time (also after closing): they stay in the cloud and the router only gets
+ * them when that day starts at 5:00 AM, so the 1:00 AM closing cannot delete them.
+ * Today's slips cannot be made in the 1:00–5:00 AM closed window (today is over).
+ */
+export function batchDate(day: "today" | "tomorrow", now = Date.now()): string {
+  const today = businessDate(now);
+  if (day === "tomorrow") return addDays(today, 1);
+  if (isClosedWindow(now)) throw new UserError("Today's café day ended at the 1:00 AM closing. Make the slips for tomorrow instead (they start working at 5:00 AM).");
+  return today;
+}
+
+/** A batch for a later day than today: printable before its codes are on the router. */
+export function isAdvance(b: Pick<Batch, "business_date">, now = Date.now()): boolean {
+  return b.business_date > businessDate(now);
+}
+
 /** How many of a batch's (non-void) codes the router has confirmed. */
 export async function batchProgress(db: DB, batchId: number): Promise<{ total: number; onRouter: number }> {
   const r = await db.get<{ total: number; onr: number }>(
@@ -124,13 +141,13 @@ export async function batchProgress(db: DB, batchId: number): Promise<{ total: n
   return { total: r?.total ?? 0, onRouter: r?.onr ?? 0 };
 }
 
-export async function markPrinted(db: DB, batchId: number, staffId: number) {
+export async function markPrinted(db: DB, batchId: number, staffId: number, now = Date.now()) {
   const b = await getBatch(db, batchId);
   if (!b) throw new UserError("No such batch.");
-  if (b.state === "pending") throw new UserError("Not all codes are on the router yet; wait for them before printing.");
+  if (b.state === "pending" && !isAdvance(b, now)) throw new UserError("Not all codes are on the router yet; wait for them before printing.");
   if (b.state === "void") throw new UserError("This batch was voided.");
-  const first = b.state === "on_router";
-  await db.run("UPDATE batches SET state = 'printed', printed_at = COALESCE(printed_at, ?), printed_by = COALESCE(printed_by, ?) WHERE id = ?", Date.now(), staffId, batchId);
+  const first = b.state !== "printed";
+  await db.run("UPDATE batches SET state = 'printed', printed_at = COALESCE(printed_at, ?), printed_by = COALESCE(printed_by, ?) WHERE id = ?", now, staffId, batchId);
   await audit(db, "batch_printed", { staffId, detail: `#${batchId}${first ? "" : " (reprint)"}` });
 }
 
