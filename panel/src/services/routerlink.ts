@@ -3,9 +3,9 @@ import { parseRouterComment, routerComment } from "../codes.ts";
 import type { DB } from "../db.ts";
 import { formatCommands, parseReport, type RouterCommand } from "../router/protocol.ts";
 import type { RouterActive, RouterInfo } from "../router/types.ts";
-import { businessDate, closingMs, isClosedWindow, routerEpochToMs } from "../time.ts";
+import { businessDate, closingMs, routerEpochToMs } from "../time.ts";
 import { audit } from "./audit.ts";
-import type { CodeRow } from "./batches.ts";
+import { ensurePool, type CodeRow } from "./batches.ts";
 
 /** Router counts as connected if it reported within this time. */
 const FRESH_MS = 90_000;
@@ -64,7 +64,12 @@ export async function handleRouterReport(db: DB, profiles: { soloProfile: string
                 ON CONFLICT(id) DO UPDATE SET reported_at = excluded.reported_at, info = excluded.info, active = excluded.active`,
     now, JSON.stringify(rep.info), JSON.stringify(rep.active));
 
-  const codes = await db.all<CodeRow>("SELECT * FROM codes WHERE business_date = ?", today);
+  await ensurePool(db, now);
+  // every code the router has, plus codes it should have: unused and still valid (they
+  // carry over from day to day), or in use. Older days' advance batches wait for their day.
+  const codes = await db.all<CodeRow>(`
+    SELECT * FROM codes WHERE on_router = 1 OR status = 'active'
+       OR (status = 'unused' AND valid_until > ? AND business_date <= ?)`, now, today);
 
   await db.tx(async (t) => {
     const setOn: number[] = [], setOff: number[] = [];
@@ -80,6 +85,8 @@ export async function handleRouterReport(db: DB, profiles: { soloProfile: string
       if (c.status === "unused") {
         await t.run("UPDATE codes SET status = 'active', first_login_at = ?, ends_at = ? WHERE id = ?", startMs, endMs, c.id);
         c.status = "active";
+        c.first_login_at = startMs;
+        c.ends_at = endMs;
         const n = devices.get(c.code) ?? 1;
         await audit(t, "first_login", {
           code: c.code, at: startMs,
@@ -101,23 +108,37 @@ export async function handleRouterReport(db: DB, profiles: { soloProfile: string
     }
     // batches whose every code the router has confirmed become printable
     await t.run(`UPDATE batches SET state = 'on_router', pushed_at = ?, last_error = NULL
-                 WHERE state = 'pending' AND business_date = ?
-                   AND NOT EXISTS (SELECT 1 FROM codes c WHERE c.batch_id = batches.id AND c.status != 'void' AND c.on_router = 0)`, now, today);
-    // codes from earlier days still marked active stopped at that day's 1:00 AM closing
-    const stale = await t.all<{ id: number; business_date: string }>("SELECT id, business_date FROM codes WHERE status = 'active' AND business_date < ?", today);
-    for (const s of stale) await t.run("UPDATE codes SET status = 'expired', expired_at = ? WHERE id = ?", closingMs(s.business_date), s.id);
+                 WHERE state = 'pending' AND business_date <= ?
+                   AND NOT EXISTS (SELECT 1 FROM codes c WHERE c.batch_id = batches.id AND c.status = 'unused' AND c.on_router = 0)`, now, today);
+    // codes in use stop at the 1:00 AM closing of the day they were first used
+    for (const c of codes) {
+      if (c.status !== "active" || !c.first_login_at) continue;
+      const close = closingMs(businessDate(c.first_login_at));
+      if (now >= close) {
+        await t.run("UPDATE codes SET status = 'expired', expired_at = ? WHERE id = ?", Math.min(close, c.ends_at ?? close), c.id);
+        c.status = "expired";
+      }
+    }
+    // unused codes past their validity (30 days) lapse; the router is told to delete them
+    for (const c of codes) {
+      if (c.status !== "unused" || c.valid_until > now) continue;
+      await t.run("UPDATE codes SET status = 'expired', expired_at = ? WHERE id = ? AND status = 'unused'", c.valid_until, c.id);
+      c.status = "expired";
+    }
   });
 
   // ---- work for the router -------------------------------------------------
   const cmds: RouterCommand[] = [];
   for (const c of codes) {
-    if (c.status === "void" && onRouter.has(c.code)) cmds.push({ kind: "del", code: c.code });
+    // void codes, and unused codes that lapsed (the router's closing only removes used ones)
+    const lapsed = c.status === "expired" && !c.first_login_at;
+    if ((c.status === "void" || lapsed) && onRouter.has(c.code)) cmds.push({ kind: "del", code: c.code });
   }
-  if (!isClosedWindow(now)) {
+  {
     let adds = 0;
     for (const c of codes) {
-      if (c.status === "void" || onRouter.has(c.code) || adds >= MAX_ADDS) continue;
-      if (c.status !== "unused") continue; // a used code that vanished from the router is not re-created
+      if (onRouter.has(c.code) || adds >= MAX_ADDS) continue;
+      if (c.status !== "unused" || c.valid_until <= now) continue; // a used code that vanished from the router is not re-created
       cmds.push({
         kind: "add", code: c.code,
         profile: c.type === "S" ? profiles.soloProfile : profiles.groupProfile,

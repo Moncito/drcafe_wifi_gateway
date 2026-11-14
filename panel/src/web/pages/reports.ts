@@ -20,8 +20,9 @@ export function reportsMain(d: ReportsData): Safe {
   const days = d.report.days;
   const used = (x: (typeof days)[number]) => x.soloUsed + x.groupUsed;
   const total = days.reduce((a, x) => a + used(x), 0);
-  const withSlips = days.filter((x) => x.soloMade + x.groupMade > 0);
-  const avg = withSlips.length ? Math.round(total / withSlips.length) : 0;
+  const elapsed = days.filter((x) => x.date <= d.today).length;
+  const avg = elapsed ? Math.round(total / elapsed) : 0;
+  const given = days.reduce((a, x) => a + x.given, 0);
   const best = days.reduce<(typeof days)[number] | null>((m, x) => (used(x) > (m ? used(m) : 0) ? x : m), null);
   const change = d.report.prevTotal ? Math.round(((total - d.report.prevTotal) / d.report.prevTotal) * 100) : null;
 
@@ -30,13 +31,11 @@ export function reportsMain(d: ReportsData): Safe {
   const topHourIdx = perHour.reduce((m, n, i) => (n > perHour[m]! ? i : m), 0);
   const peakDays = [0, 1, 2, 3, 4, 5, 6].map((w) => ({ w, n: d.report.heat[w]!.reduce((a, b) => a + b, 0) })).sort((a, b) => b.n - a.n).slice(0, 2).filter((x) => x.n > 0);
 
-  // unused at closing: finished days only
-  const finished = days.filter((x) => x.date < d.today && x.soloMade + x.groupMade > 0);
-  const unusedOf = (x: (typeof days)[number]) => x.soloMade - x.soloUsed + (x.groupMade - x.groupUsed);
-  const avgUnused = finished.length ? Math.round(finished.reduce((a, x) => a + unusedOf(x), 0) / finished.length) : null;
-  const lastWeek = finished.slice(-7);
-  const unusedMax = Math.max(1, ...lastWeek.map(unusedOf));
-  const avgSoloUnused = finished.length ? Math.round(finished.reduce((a, x) => a + (x.soloMade - x.soloUsed), 0) / finished.length) : 0;
+  // paper: printed, used and wasted (expired unused after 30 days)
+  const printed = days.reduce((a, x) => a + x.printed, 0);
+  const wasted = days.reduce((a, x) => a + x.wasted, 0);
+  const lastWeek = days.slice(-7).filter((x) => x.date <= d.today);
+  const paperMax = Math.max(1, ...lastWeek.map((x) => Math.max(x.printed, used(x))));
 
   const max = Math.max(10, ...days.map((x) => x.soloUsed + x.groupUsed));
   const heatMax = Math.max(1, ...d.report.heat.flat());
@@ -65,7 +64,7 @@ ${flash(d.flash)}
   ${kpi("Slips used", total.toLocaleString("en-US"), change === null ? `in ${d.range} days` : html`<span class="${change >= 0 ? "kpi-up" : "kpi-down"}">${change >= 0 ? "▲" : "▼"} ${Math.abs(change)}%</span> vs the ${d.range} days before`)}
   ${kpi("Average per day", String(avg), best && used(best) ? `Busiest: ${formatDateShort(best.date)} (${used(best)})` : "No slips used yet")}
   ${kpi("Busiest hour", perHour[topHourIdx] ? hourName(HEAT_HOURS[topHourIdx]!) : "–", peakDays.length ? `Busiest days: ${peakDays.map((p) => WD[p.w]).join(" & ")}` : "Not enough data yet")}
-  ${kpi("Unused at closing", avgUnused === null ? "–" : String(avgUnused), "slips deleted per night, on average")}
+  ${kpi("Paper wasted", String(wasted), wasted ? `slips expired unused · of ${printed} printed` : `of ${printed} slips printed${given ? ` · ${given} given on screen` : ""}`)}
 </div>
 
 <section class="card">
@@ -101,9 +100,13 @@ ${flash(d.flash)}
   </section>
 
   <section class="card grow-2 stack-14">
-    <div class="stack-4"><h2 style="margin:0">Unused at closing</h2><span class="muted small">Slips deleted at 1:00 AM, last ${lastWeek.length || 7} nights</span></div>
-    ${lastWeek.length ? lastWeek.map((x) => html`<div class="hbar"><span>${WD[x.dow]} ${formatDateShort(x.date).split(" ").pop()}</span><span class="track"><i style="width:${Math.round((unusedOf(x) / unusedMax) * 100)}%"></i></span><strong>${unusedOf(x)}</strong></div>`) : html`<p class="muted">Shows after the first closing.</p>`}
-    ${avgSoloUnused >= 20 ? html`<p class="hint-box"><strong>Idea:</strong> about ${avgSoloUnused} solo slips go unused each night. Printing ${Math.max(0, Math.floor(avgSoloUnused / 10) * 10)} fewer solo slips a day saves paper (Settings › slips per day).</p>` : ""}
+    <div class="stack-4"><h2 style="margin:0">Printed vs used</h2><span class="muted small">Last ${lastWeek.length} days · unused slips carry over for 30 days</span></div>
+    ${lastWeek.map((x) => html`<div class="stack-4">
+      <div class="hbar"><span>${WD[x.dow]} ${formatDateShort(x.date).split(" ").pop()}</span><span class="track"><i style="width:${Math.round((used(x) / paperMax) * 100)}%"></i></span><strong>${used(x)}</strong></div>
+      ${x.printed ? html`<div class="hbar"><span class="muted small">printed</span><span class="track"><i style="width:${Math.round((x.printed / paperMax) * 100)}%;background:var(--caramel)"></i></span><strong>${x.printed}</strong></div>` : ""}
+      ${x.wasted ? html`<div class="hbar"><span class="bad small">expired</span><span class="track"><i style="width:${Math.round((x.wasted / paperMax) * 100)}%;background:var(--danger)"></i></span><strong>${x.wasted}</strong></div>` : ""}
+    </div>`)}
+    ${wasted >= 10 ? html`<p class="hint-box"><strong>Idea:</strong> ${wasted} slips expired unused in this period. Print smaller batches (one A4 page is 48 slips).</p>` : ""}
   </section>
 </div>
 

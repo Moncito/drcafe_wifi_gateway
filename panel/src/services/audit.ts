@@ -3,7 +3,7 @@ import type { DB } from "../db.ts";
 export type AuditAction =
   | "login" | "login_failed" | "logout"
   | "batch_created" | "batch_pushed" | "batch_push_failed" | "batch_printed"
-  | "void" | "disconnect"
+  | "void" | "disconnect" | "issued"
   | "first_login" | "expired"
   | "settings_saved" | "staff_added" | "staff_changed" | "password_reset";
 

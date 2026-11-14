@@ -43,9 +43,9 @@ ${flash(d.flash)}
     <form method="post" action="/settings" class="stack-14">
       <div class="rule-grid">
         ${field("durMinutes", "Time per code (minutes)", Math.round(s.durSeconds / 60), "Counted like a clock from first login. 180 = 3 hours", 'min="15" max="1200" step="15"')}
-        ${field("soloPerDay", "Solo slips per day", s.soloPerDay, `S-001 to S-${String(s.soloPerDay).padStart(3, "0")}`)}
-        ${field("groupPerDay", "Group slips per day", s.groupPerDay, `G-001 to G-${String(s.groupPerDay).padStart(3, "0")}`)}
-        ${field("extraSolo", "“+ solo” button adds", s.extraSolo, "Extra slips when today runs out", 'min="1" max="200"')}
+        ${field("soloPerDay", "Solo slips per print", s.soloPerDay, "Suggested amount on the Print page")}
+        ${field("groupPerDay", "Group slips per print", s.groupPerDay, "Unused slips carry over for 30 days")}
+        ${field("extraSolo", "“+ solo” button adds", s.extraSolo, "Quick print when stock runs low", 'min="1" max="200"')}
         ${field("extraGroup", "“+ group” button adds", s.extraGroup, "Extra group slips", 'min="1" max="100"')}
       </div>
       <div class="actions">
@@ -56,7 +56,7 @@ ${flash(d.flash)}
     <h3 class="sub">Set on the router</h3>
     <p class="muted small">These are part of the router configuration (Phase 1 scripts) and are shown here for reference.</p>
     <div class="rule-grid">
-      <div class="ro"><span>All codes stop at</span><strong>1:00 AM</strong><small>Closing; unused slips are deleted</small></div>
+      <div class="ro"><span>Codes in use stop at</span><strong>1:00 AM</strong><small>Closing; unused slips carry over for 30 days</small></div>
       <div class="ro"><span>Speed per device</span><strong>${info?.rateLimit || "–"}</strong><small>Download / upload</small></div>
       <div class="ro"><span>Devices per group code</span><strong>${info?.groupDevices || "–"}</strong><small>Solo codes are always 1 device</small></div>
       <div class="ro"><span>Idle logout</span><strong>${info?.idleTimeout || "–"}</strong><small>Time is kept when they log back in</small></div>

@@ -1,10 +1,11 @@
 import type { Staff } from "../services/auth.ts";
 import { html, raw, type Safe } from "./html.ts";
 
-export type NavKey = "today" | "print" | "lookup" | "reports" | "settings";
+export type NavKey = "today" | "give" | "print" | "lookup" | "reports" | "settings";
 
 const ICONS: Record<NavKey, string> = {
   today: '<rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/>',
+  give: '<path d="M5 12.5a10 10 0 0 1 14 0"/><path d="M8.5 16a5 5 0 0 1 7 0"/><path d="M2 9a15 15 0 0 1 20 0"/><circle cx="12" cy="19.5" r="1"/>',
   print: '<path d="M6 9V3h12v6"/><rect x="3" y="9" width="18" height="8" rx="2"/><path d="M6 14h12v7H6z"/>',
   lookup: '<circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/>',
   reports: '<path d="M4 20V10"/><path d="M10 20V4"/><path d="M16 20v-7"/><path d="M22 20H2"/>',
@@ -13,6 +14,7 @@ const ICONS: Record<NavKey, string> = {
 
 const NAV: { key: NavKey; href: string; label: string; adminOnly?: boolean }[] = [
   { key: "today", href: "/", label: "Today" },
+  { key: "give", href: "/give", label: "Give Wi‑Fi" },
   { key: "print", href: "/print", label: "Print slips" },
   { key: "lookup", href: "/lookup", label: "Look up & devices" },
   { key: "reports", href: "/reports", label: "Reports", adminOnly: true },

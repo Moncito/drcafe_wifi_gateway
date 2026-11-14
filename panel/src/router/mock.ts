@@ -41,7 +41,10 @@ export class MockRouter {
     const now = this.now();
     const epoch = msToRouterEpoch(now);
     if (isClosedWindow(now)) {
-      this.state.users = this.state.users.filter((u) => !CODE_RE.test(u.name));
+      // closing: codes that were used end; unused ones carry over to the next day
+      const used = (u: RouterUser) => CODE_RE.test(u.name) && (u.disabled || parseRouterComment(u.comment).start !== undefined);
+      const gone = new Set(this.state.users.filter(used).map((u) => u.name));
+      this.state.users = this.state.users.filter((u) => !gone.has(u.name));
       this.state.active = this.state.active.filter((a) => !CODE_RE.test(a.user));
       return;
     }

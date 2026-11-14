@@ -49,3 +49,6 @@ html, body { margin: 0; background: #e8e2d8; color: #111; font-family: "DM Sans"
 }
 /* the Wi-Fi name may wrap to 2 lines rather than being cut off */
 .slip-wifi { white-space: normal; overflow: visible; }
+
+/* validity line: unused slips carry over until this date */
+.slip-valid { font-size: 6pt; }

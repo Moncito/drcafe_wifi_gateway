@@ -8,17 +8,18 @@ import {
   createStaff, listStaff, login, logout, sessionStaff, staffCount, updateStaff, type Role, type Staff,
 } from "../services/auth.ts";
 import {
-  batchesForDate, codesBySerialRange, codesForBatch, createBatch, dailyBatch, findBySerial, findCode, getBatch, isAdvance, markPrinted,
-  pastDays, UserError, voidCodes, type CodeRow,
+  codesBySerialRange, codesForBatch, createBatch, ensurePool, findBySerial, findCode, getBatch, isAdvance, issueCode, markPrinted,
+  poolStatus, UserError, voidCodes, type CodeRow,
 } from "../services/batches.ts";
 import { getRouterStatus, handleRouterReport, queueKick, tokenMatches } from "../services/routerlink.ts";
 import { getSettings, saveSettings } from "../services/settings.ts";
-import { dayCounts, drinkCounts, report, routerBacklog, saveDrinkCount, usageByHour, usualByHour } from "../services/stats.ts";
-import { addDays, businessDate, closingMs, formatDateShort, isClosedWindow } from "../time.ts";
+import { dayWindow, drinkCounts, recentPrints, report, routerBacklog, saveDrinkCount, stock, usageByHour, usualByHour } from "../services/stats.ts";
+import { addDays, businessDate, closingMs, isClosedWindow } from "../time.ts";
 import { html } from "./html.ts";
 import { appPage, type Flash } from "./layout.ts";
 import { loginPage, setupPage } from "./pages/login.ts";
 import { lookupMain } from "./pages/lookup.ts";
+import { giveMain } from "./pages/give.ts";
 import { printMain } from "./pages/print.ts";
 import { reportsMain } from "./pages/reports.ts";
 import { settingsMain } from "./pages/settings.ts";
@@ -148,71 +149,95 @@ export function buildRoutes(ctx: Ctx) {
     const db = dbOf(res);
     const now = Date.now();
     const date = businessDate(now);
-    const batches = await batchesForDate(db, date);
-    const daily = batches.find((b) => b.kind === "daily" && b.state !== "void");
-    const batchBy = daily ? (await db.get<{ n: string }>("SELECT display_name AS n FROM staff WHERE id = ?", daily.printed_by ?? daily.created_by ?? 0))?.n ?? null : null;
-    const tomorrowDate = addDays(date, 1);
-    const [{ bars, shifts }, counts, sync, recent, usual, backlog, tomorrowBatch] = await Promise.all([
-      usageByHour(db, date), dayCounts(db, date), getRouterStatus(db, now),
-      recentActivity(db, 40, ["first_login", "expired", "void", "disconnect", "batch_created", "batch_printed"]),
-      usualByHour(db, date), routerBacklog(db, date), dailyBatch(db, tomorrowDate),
+    const [{ bars, shifts }, st, sync, recent, usual, backlog, prints, settings] = await Promise.all([
+      usageByHour(db, date), stock(db, date, now), getRouterStatus(db, now),
+      recentActivity(db, 40, ["first_login", "expired", "void", "disconnect", "batch_created", "batch_printed", "issued"]),
+      usualByHour(db, date), routerBacklog(db, date, now), recentPrints(db, now), getSettings(db),
     ]);
-    const activity = recent.filter((a) => businessDate(a.at) === date).slice(0, 10);
+    const [from] = dayWindow(date);
+    const activity = recent.filter((a) => a.at >= from).slice(0, 10);
     res.send(appPage({
       title: "Today", staff: me(res), active: "today", refreshSeconds: 30,
-      main: todayMain({
-        now, date, counts, bars, usual, shifts, batches, batchBy, backlog, tomorrow: { date: tomorrowDate, batch: tomorrowBatch ?? null },
-        activity, sync, isAdmin: me(res).role === "admin",
-      }),
+      main: todayMain({ now, date, stock: st, bars, usual, shifts, backlog, lastPrint: prints[0] ?? null, activity, sync, settings, isAdmin: me(res).role === "admin" }),
     }).value);
+  });
+
+  // ---- Give Wi-Fi (code on screen) -------------------------------------------
+  r.get("/give", async (req, res) => {
+    const db = dbOf(res);
+    const now = Date.now();
+    await ensurePool(db, now);
+    const code = str(req.query.code);
+    let shown: CodeRow | null = null;
+    if (CODE_RE.test(code)) {
+      const c = await findCode(db, code);
+      // only a code given in the last 15 minutes is shown again (e.g. after a refresh)
+      if (c?.issued_at && now - c.issued_at < 15 * 60_000) shown = c;
+    }
+    const [pool, sync] = await Promise.all([poolStatus(db, now), getRouterStatus(db, now)]);
+    res.send(appPage({
+      title: "Give Wi‑Fi", staff: me(res), active: "give", refreshSeconds: shown ? undefined : 30,
+      main: await giveMain({ now, pool, sync, shown, wifiName: cfg.wifiName, qrBase: cfg.qrLoginUrl, closed: isClosedWindow(now), flash: readFlash(req) }),
+    }).value);
+  });
+
+  r.post("/give", async (req, res) => {
+    const type = str(req.body.type) === "G" ? "G" : "S";
+    try {
+      const c = await issueCode(dbOf(res), type, me(res).id);
+      res.redirect(`/give?code=${c.code}`);
+    } catch (e) {
+      if (e instanceof UserError) return res.redirect(withMsg("/give", "err", e.message));
+      throw e;
+    }
   });
 
   // ---- Print slips -----------------------------------------------------------
   r.get("/print", async (req, res) => {
     const db = dbOf(res);
     const now = Date.now();
-    const closed = isClosedWindow(now);
-    // after the 1:00 AM closing only tomorrow can be printed
-    const day: "today" | "tomorrow" = closed || str(req.query.day) === "tomorrow" ? "tomorrow" : "today";
-    const date = day === "tomorrow" ? addDays(businessDate(now), 1) : businessDate(now);
-    const staffNames = new Map((await listStaff(db)).map((s) => [s.id, s.display_name]));
-    const batches = await Promise.all((await batchesForDate(db, date)).map(async (b) => ({ ...b, codes: await codesForBatch(db, b.id), by: staffNames.get(b.created_by ?? 0) ?? null })));
-    const [settings, history, sync] = await Promise.all([getSettings(db), pastDays(db, 14), getRouterStatus(db, now)]);
+    const date = businessDate(now);
+    const [settings, prints, st, sync] = await Promise.all([getSettings(db), recentPrints(db, now), stock(db, date, now), getRouterStatus(db, now)]);
     res.send(appPage({
       title: "Print slips", staff: me(res), active: "print",
-      refreshSeconds: day === "today" && batches.some((b) => b.state === "pending") ? 8 : undefined,
-      main: printMain({ date, day, todayDate: businessDate(now), closed, settings, isAdmin: me(res).role === "admin", batches, history, routerOk: sync.ok, flash: readFlash(req) }),
+      refreshSeconds: prints.some((b) => b.state === "pending") ? 8 : undefined,
+      main: printMain({ now, settings, isAdmin: me(res).role === "admin", prints, stock: st, routerOk: sync.ok, flash: readFlash(req) }),
     }).value);
   });
 
   r.post("/batches", async (req, res) => {
-    const kind = str(req.body.kind) === "daily" ? "daily" : "extra";
-    const day = str(req.body.day) === "tomorrow" ? "tomorrow" : "today";
-    const back = day === "tomorrow" ? "/print?day=tomorrow" : "/print";
-    if (kind === "daily" && me(res).role !== "admin") return res.redirect(withMsg(back, "err", "Only the owner/admin makes the daily batch."));
+    const isAdmin = me(res).role === "admin";
+    const settings = await getSettings(dbOf(res));
+    let solo = int(req.body.solo), group = int(req.body.group);
+    // baristas print only the preset amounts (the "+ solo" / "+ group" buttons)
+    if (!isAdmin && !((solo === settings.extraSolo && group === 0) || (solo === 0 && group === settings.extraGroup))) {
+      return res.redirect(withMsg("/print", "err", "Only the owner can print a custom number of slips."));
+    }
+    if (Number.isNaN(solo)) solo = 0;
+    if (Number.isNaN(group)) group = 0;
     const requestId = str(req.body.requestId);
-    if (!/^[0-9a-f-]{36}$/.test(requestId)) return res.redirect(withMsg(back, "err", "Form expired. Please try again."));
+    if (!/^[0-9a-f-]{36}$/.test(requestId)) return res.redirect(withMsg("/print", "err", "Form expired. Please try again."));
     try {
-      const batch = await createBatch(dbOf(res), { kind, day, solo: int(req.body.solo), group: int(req.body.group), requestId, staffId: me(res).id });
-      const n = batch.solo_count + batch.group_count;
-      res.redirect(withMsg(back, "ok", isAdvance(batch)
-        ? `${n} slips for ${formatDateShort(batch.business_date)} created. You can print them now; they start working at 5:00 AM that day.`
-        : `${n} codes created. The router adds them at its next check-in; the Print button appears when all are on the router.`));
+      const batch = await createBatch(dbOf(res), { solo, group, requestId, staffId: me(res).id });
+      res.redirect(withMsg("/print", "ok", `${batch.solo_count + batch.group_count} slips created. The router adds them in about 20 seconds, then Print appears.`));
     } catch (e) {
-      if (e instanceof UserError) return res.redirect(withMsg(back, "err", e.message));
+      if (e instanceof UserError) return res.redirect(withMsg("/print", "err", e.message));
       throw e;
     }
   });
 
   r.get("/batches/:id/sheet", async (req, res) => {
     const db = dbOf(res);
-    const batch = await getBatch(db, int(req.params.id));
     const now = Date.now();
-    if (!batch || (batch.business_date !== businessDate(now) && batch.business_date !== addDays(businessDate(now), 1))) return res.redirect(withMsg("/print", "err", "Only today's and tomorrow's slips can be printed."));
+    const batch = await getBatch(db, int(req.params.id));
+    if (!batch || batch.pool) return res.redirect(withMsg("/print", "err", "No such print."));
     if (batch.state === "pending" && !isAdvance(batch, now)) return res.redirect(withMsg("/print", "err", "Not all codes are on the router yet. Wait for the router's next check-in."));
     if (batch.state === "void") return res.redirect(withMsg("/print", "err", "This batch was voided."));
+    // only slips that can still be used are printed (used, expired and void ones are skipped)
+    const codes = (await codesForBatch(db, batch.id)).filter((c) => c.status === "unused" && c.valid_until > now);
+    if (!codes.length) return res.redirect(withMsg("/print", "err", "Every slip in this print has been used or has expired."));
     const page = int(req.query.page);
-    res.send((await sheetPage({ batch, codes: await codesForBatch(db, batch.id), wifiName: cfg.wifiName, qrBase: cfg.qrLoginUrl, onlyPage: Number.isNaN(page) ? undefined : page })).value);
+    res.send((await sheetPage({ batch, codes, wifiName: cfg.wifiName, qrBase: cfg.qrLoginUrl, onlyPage: Number.isNaN(page) ? undefined : page })).value);
   });
 
   r.post("/batches/:id/printed", async (req, res) => {
@@ -228,24 +253,23 @@ export function buildRoutes(ctx: Ctx) {
     const db = dbOf(res);
     const batch = await getBatch(db, int(req.params.id));
     if (!batch) return res.redirect("/print");
-    const back = isAdvance(batch) ? "/print?day=tomorrow" : "/print";
-    const out = await voidCodes(db, await codesForBatch(db, batch.id), me(res).id, `batch #${batch.id} voided`);
-    res.redirect(withMsg(back, "ok", voidSummary(out.voided.length)));
+    const now = Date.now();
+    // only slips still out there; used and expired ones are history
+    const codes = (await codesForBatch(db, batch.id)).filter((c) => c.status === "active" || (c.status === "unused" && c.valid_until > now));
+    const out = await voidCodes(db, codes, me(res).id, `batch #${batch.id} voided`);
+    res.redirect(withMsg("/print", "ok", voidSummary(out.voided.length)));
   });
 
   r.post("/void-range", adminOnly, async (req, res) => {
     const db = dbOf(res);
     const type = str(req.body.type) === "G" ? "G" : "S";
     const from = int(req.body.from), to = int(req.body.to);
-    const tomorrow = str(req.body.day) === "tomorrow";
-    const back = tomorrow ? "/print?day=tomorrow" : "/print";
-    if (!(from >= 1 && to >= from)) return res.redirect(withMsg(back, "err", "Enter a serial range like 41 to 60."));
-    const date = tomorrow ? addDays(businessDate(Date.now()), 1) : businessDate(Date.now());
-    const codes = await codesBySerialRange(db, date, type, from, to);
-    if (!codes.length) return res.redirect(withMsg(back, "err", `No ${type} slips ${from}–${to} for ${formatDateShort(date)}.`));
+    if (!(from >= 1 && to >= from)) return res.redirect(withMsg("/print", "err", "Enter a serial range like 41 to 60."));
+    const codes = await codesBySerialRange(db, type, from, to);
+    if (!codes.length) return res.redirect(withMsg("/print", "err", `No usable ${type} slips between ${serialLabel(type, from)} and ${serialLabel(type, to)}.`));
     const reason = `${serialLabel(type, from)} to ${serialLabel(type, to)}${str(req.body.reason) ? ` · ${str(req.body.reason).slice(0, 80)}` : ""}`;
     const out = await voidCodes(db, codes, me(res).id, reason);
-    res.redirect(withMsg(back, "ok", voidSummary(out.voided.length)));
+    res.redirect(withMsg("/print", "ok", voidSummary(out.voided.length)));
   });
 
   // ---- Reports (owner) ---------------------------------------------------------
@@ -291,15 +315,16 @@ export function buildRoutes(ctx: Ctx) {
       if (CODE_RE.test(norm)) result = (await findCode(db, norm)) ?? null;
       else {
         const s = parseSerial(q);
-        if (s) result = (await findBySerial(db, today, s.type, s.serial)) ?? null;
+        if (s) result = (await findBySerial(db, s.type, s.serial)) ?? null;
       }
     }
     const sync = await getRouterStatus(db, now);
-    const todays = new Map((await db.all<CodeRow>("SELECT * FROM codes WHERE business_date = ?", today)).map((c) => [c.code, c]));
+    const users = [...new Set(sync.active.map((a) => a.user))];
+    const inUse = new Map(users.length ? (await db.all<CodeRow>(`SELECT * FROM codes WHERE code IN (${users.map(() => "?").join(",")})`, ...users)).map((c) => [c.code, c]) : []);
     const online = sync.active.map((a) => {
-      const c = todays.get(a.user);
-      // a code ends 3 h after first login OR at 1:00 AM closing, whichever is first
-      return { ...a, serial: c ? serialLabel(c.type, c.serial) : "", type: (a.user[0] as CodeType), endsAt: c?.ends_at ? Math.min(c.ends_at, closingMs(c.business_date)) : null };
+      const c = inUse.get(a.user);
+      // a code ends 3 h after first login OR at that night's 1:00 AM closing, whichever is first
+      return { ...a, serial: c ? serialLabel(c.type, c.serial) : "", type: (a.user[0] as CodeType), endsAt: c?.ends_at && c.first_login_at ? Math.min(c.ends_at, closingMs(businessDate(c.first_login_at))) : null };
     });
     res.send(appPage({
       title: "Look up", staff: me(res), active: "lookup", refreshSeconds: q ? undefined : 30,

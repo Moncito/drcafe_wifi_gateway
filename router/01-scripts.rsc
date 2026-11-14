@@ -63,11 +63,12 @@
     \n:local st \"\"\r\
     \n:do { :set st [:tostr [/system ntp client get status]] } on-error={}\r\
     \n:if (\$st != \"synchronized\") do={ :log warning \"drc-closing: clock not synced yet, skipped\"; :return \"\" }\r\
-    \n:local n [:len [/ip hotspot user find where name~\$re]]\r\
+    \n:local used [/ip hotspot user find where name~\$re && (comment~\"start=\" || disabled=yes)]\r\
+    \n:local n [:len \$used]\r\
     \n/ip hotspot active remove [find where user~\$re]\r\
     \n/ip hotspot cookie remove [find where user~\$re]\r\
-    \n/ip hotspot user remove [find where name~\$re]\r\
-    \n:log info (\"drc-closing: removed \" . \$n . \" codes\")"
+    \n/ip hotspot user remove \$used\r\
+    \n:if (\$n > 0) do={ :log info (\"drc-closing: removed \" . \$n . \" used codes; unused slips carry over\") }"
 
 /system script remove [find where name="drc-cloud-sync"]
 /system script add name=drc-cloud-sync policy=read,write,test dont-require-permissions=no comment="Don Robert Cafe Wi-Fi" source=":local re \"^[SG][A-HJKMNP-Z2-9]{5}\\\$\"\r\
@@ -255,7 +256,7 @@
     \n:local closeH 1\r\
     \n:if ([:len [/system scheduler find where name=\"drc-late-close\"]] > 0) do={ :set closeH 3 }\r\
     \n:if ((\$hh >= \$closeH) && (\$hh < 5)) do={\r\
-    \n  :if ([:len [/ip hotspot user find where name~\$re]] > 0) do={ /system script run drc-closing }\r\
+    \n  :if (([:len [/ip hotspot user find where name~\$re && (comment~\"start=\" || disabled=yes)]] > 0) || ([:len [/ip hotspot active find where user~\$re]] > 0)) do={ /system script run drc-closing }\r\
     \n  :return \"\"\r\
     \n}\r\
     \n:foreach id in=[/ip hotspot user find where name~\$re && disabled=no && comment~\";end=\"] do={\r\

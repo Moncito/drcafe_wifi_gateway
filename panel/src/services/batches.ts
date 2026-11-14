@@ -1,6 +1,7 @@
+import { randomUUID } from "node:crypto";
 import { randomCode, serialLabel, type CodeStatus, type CodeType } from "../codes.ts";
 import type { DB } from "../db.ts";
-import { addDays, businessDate, formatDateShort, isClosedWindow } from "../time.ts";
+import { addDays, businessDate, closingMs, isClosedWindow } from "../time.ts";
 import { audit } from "./audit.ts";
 import { getSettings } from "./settings.ts";
 
@@ -19,6 +20,8 @@ export interface Batch {
   printed_at: number | null;
   printed_by: number | null;
   last_error: string | null;
+  /** 1 = codes kept on the router for "Give Wi-Fi", never printed */
+  pool: number;
 }
 
 export interface CodeRow {
@@ -35,6 +38,10 @@ export interface CodeRow {
   ends_at: number | null;
   expired_at: number | null;
   voided_at: number | null;
+  /** unused slips stop working at this time (30 days after printing) */
+  valid_until: number;
+  issued_at: number | null;
+  issued_by: number | null;
 }
 
 export class UserError extends Error {}
@@ -57,41 +64,56 @@ export function codesForBatch(db: DB, batchId: number) {
 export function findCode(db: DB, code: string) {
   return db.get<CodeRow>("SELECT * FROM codes WHERE code = ?", code);
 }
-export function findBySerial(db: DB, date: string, type: CodeType, serial: number) {
-  return db.get<CodeRow>("SELECT * FROM codes WHERE business_date = ? AND type = ? AND serial = ?", date, type, serial);
+/** The newest code with this serial (serials run on for good, so it's the one in use). */
+export function findBySerial(db: DB, type: CodeType, serial: number) {
+  return db.get<CodeRow>("SELECT * FROM codes WHERE type = ? AND serial = ? ORDER BY id DESC LIMIT 1", type, serial);
 }
-export function codesBySerialRange(db: DB, date: string, type: CodeType, from: number, to: number) {
-  return db.all<CodeRow>("SELECT * FROM codes WHERE business_date = ? AND type = ? AND serial BETWEEN ? AND ? ORDER BY serial", date, type, from, to);
+/** Codes in a serial range that can still be used (unused and valid, or in use). */
+export function codesBySerialRange(db: DB, type: CodeType, from: number, to: number, now = Date.now()) {
+  return db.all<CodeRow>(`SELECT * FROM codes WHERE type = ? AND serial BETWEEN ? AND ?
+                            AND (status = 'active' OR (status = 'unused' AND valid_until > ?)) ORDER BY serial`, type, from, to, now);
+}
+
+/** Unused printed slips keep working until the 1:00 AM closing at the end of this many days. */
+export const VALID_DAYS = 30;
+export function validUntilFor(now = Date.now()): number {
+  return closingMs(addDays(businessDate(now), VALID_DAYS));
+}
+/** The café day a slip is valid until ("Valid until Dec 14"). */
+export function validDate(validUntil: number): string {
+  return businessDate(validUntil - 1);
 }
 
 /**
  * Make slips: allocate serials and unique codes (state "pending"). The router
  * picks them up on its next call (every ~20 s) and the batch becomes
- * "on_router" once the router reports every code. Idempotent per requestId:
- * a double-clicked or retried form returns the batch it already made.
+ * "on_router" once the router reports every code. Unused slips carry over from
+ * day to day until they are used or reach their validity (30 days).
+ * Serials run on (S-151, S-152 …) and never restart.
+ * Idempotent per requestId: a double-clicked or retried form returns the batch it already made.
  */
 export async function createBatch(
   db: DB,
-  opts: { kind: "daily" | "extra"; solo: number; group: number; requestId: string; staffId: number; day?: "today" | "tomorrow"; now?: number },
+  opts: { solo: number; group: number; requestId: string; staffId: number | null; pool?: boolean; now?: number },
 ): Promise<Batch> {
   const now = opts.now ?? Date.now();
   const same = await db.get<Batch>("SELECT * FROM batches WHERE request_id = ?", opts.requestId);
   if (same) return same;
 
-  const date = batchDate(opts.day ?? "today", now);
+  const date = businessDate(now);
   const solo = Math.trunc(opts.solo), group = Math.trunc(opts.group);
   if (!(solo >= 0 && group >= 0 && solo <= MAX_PER_TYPE && group <= MAX_PER_TYPE)) throw new UserError(`Counts must be between 0 and ${MAX_PER_TYPE}.`);
   if (solo + group === 0) throw new UserError("Choose at least one slip.");
-  if (opts.kind === "daily" && (await dailyBatch(db, date))) throw new UserError(`The batch for ${formatDateShort(date)} already exists. Use “Ran out?” for extra slips, or reprint a page.`);
 
   const dur = (await getSettings(db)).durSeconds;
+  const validUntil = validUntilFor(now);
   return db.tx(async (t) => {
-    const r = await t.run(`INSERT INTO batches (business_date, kind, solo_count, group_count, dur_seconds, request_id, created_by, created_at)
-                           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, date, opts.kind, solo, group, dur, opts.requestId, opts.staffId, now);
+    const r = await t.run(`INSERT INTO batches (business_date, kind, solo_count, group_count, dur_seconds, request_id, created_by, created_at, pool)
+                           VALUES (?, 'extra', ?, ?, ?, ?, ?, ?, ?)`, date, solo, group, dur, opts.requestId, opts.staffId, now, opts.pool ? 1 : 0);
     const batchId = r.lastInsertRowid;
     for (const [type, count] of [["S", solo], ["G", group]] as const) {
       if (!count) continue;
-      const max = (await t.get<{ m: number | null }>("SELECT MAX(serial) AS m FROM codes WHERE business_date = ? AND type = ?", date, type))!.m ?? 0;
+      const max = (await t.get<{ m: number | null }>("SELECT MAX(serial) AS m FROM codes WHERE type = ?", type))!.m ?? 0;
       // pick unique codes: generate, then drop any that already exist (for all time)
       const picked = new Set<string>();
       while (picked.size < count) {
@@ -107,26 +129,60 @@ export async function createBatch(
       const list = [...picked];
       for (let i = 0; i < list.length; i += 100) {
         const chunk = list.slice(i, i + 100);
-        const args = chunk.flatMap((c, j) => [c, type, max + i + j + 1, date, batchId, dur]);
-        await t.run(`INSERT INTO codes (code, type, serial, business_date, batch_id, dur_seconds) VALUES ${chunk.map(() => "(?, ?, ?, ?, ?, ?)").join(",")}`, ...args);
+        const args = chunk.flatMap((c, j) => [c, type, max + i + j + 1, date, batchId, dur, validUntil]);
+        await t.run(`INSERT INTO codes (code, type, serial, business_date, batch_id, dur_seconds, valid_until) VALUES ${chunk.map(() => "(?, ?, ?, ?, ?, ?, ?)").join(",")}`, ...args);
       }
     }
-    await audit(t, "batch_created", { staffId: opts.staffId, detail: `#${batchId} ${opts.kind}: ${solo} solo + ${group} group`, at: now });
+    if (!opts.pool) await audit(t, "batch_created", { staffId: opts.staffId, detail: `#${batchId}: ${solo} solo + ${group} group`, at: now });
     return (await t.get<Batch>("SELECT * FROM batches WHERE id = ?", batchId))!;
   });
 }
 
+// ---- Give Wi-Fi (code shown on screen, no paper) ---------------------------------
+
+/** Codes kept ready on the router for "Give Wi-Fi". */
+export const POOL_TARGET = { S: 6, G: 3 } as const;
+
+/** Unissued pool codes per type, and how many of them the router already has. */
+export async function poolStatus(db: DB, now = Date.now()) {
+  const rows = await db.all<{ type: CodeType; n: number; ready: number }>(`
+    SELECT c.type, COUNT(*) AS n, COALESCE(SUM(c.on_router), 0) AS ready FROM codes c JOIN batches b ON b.id = c.batch_id
+     WHERE b.pool = 1 AND c.status = 'unused' AND c.issued_at IS NULL AND c.valid_until > ? GROUP BY c.type`, now);
+  const get = (t: CodeType) => rows.find((r) => r.type === t) ?? { n: 0, ready: 0 };
+  return { S: get("S"), G: get("G") };
+}
+
+/** Top the pool up so codes are on the router before anyone taps "Give Wi-Fi". */
+export async function ensurePool(db: DB, now = Date.now()) {
+  const p = await poolStatus(db, now);
+  const solo = Math.max(0, POOL_TARGET.S - p.S.n), group = Math.max(0, POOL_TARGET.G - p.G.n);
+  if (solo + group === 0) return;
+  await createBatch(db, { solo, group, pool: true, staffId: null, requestId: `pool-${randomUUID()}`, now });
+}
+
 /**
- * The café day a new batch is for. Tomorrow's slips can be made and printed at
- * any time (also after closing): they stay in the cloud and the router only gets
- * them when that day starts at 5:00 AM, so the 1:00 AM closing cannot delete them.
- * Today's slips cannot be made in the 1:00–5:00 AM closed window (today is over).
+ * Hand out one code on screen. It works until tonight's 1:00 AM closing
+ * (3 hours from first login, like a slip). The pool is topped up afterwards.
  */
-export function batchDate(day: "today" | "tomorrow", now = Date.now()): string {
-  const today = businessDate(now);
-  if (day === "tomorrow") return addDays(today, 1);
-  if (isClosedWindow(now)) throw new UserError("Today's café day ended at the 1:00 AM closing. Make the slips for tomorrow instead (they start working at 5:00 AM).");
-  return today;
+export async function issueCode(db: DB, type: CodeType, staffId: number, now = Date.now()): Promise<CodeRow> {
+  if (isClosedWindow(now)) throw new UserError("The café is closed (1:00–5:00 AM). Codes given now would stop right away.");
+  const until = closingMs(businessDate(now));
+  for (let tries = 0; tries < 3; tries++) {
+    const c = await db.get<CodeRow>(`
+      SELECT c.* FROM codes c JOIN batches b ON b.id = c.batch_id
+       WHERE b.pool = 1 AND c.type = ? AND c.status = 'unused' AND c.issued_at IS NULL AND c.on_router = 1 AND c.valid_until > ?
+       ORDER BY c.id LIMIT 1`, type, now);
+    if (!c) {
+      await ensurePool(db, now);
+      throw new UserError("No code is ready on the router yet. Wait about 20 seconds and try again. If it keeps happening, check that the router is checking in.");
+    }
+    const r = await db.run("UPDATE codes SET issued_at = ?, issued_by = ?, valid_until = ? WHERE id = ? AND issued_at IS NULL", now, staffId, until, c.id);
+    if (r.changes !== 1) continue; // someone else took it at the same moment
+    await audit(db, "issued", { staffId, code: c.code, detail: "Given on screen", at: now });
+    await ensurePool(db, now);
+    return { ...c, issued_at: now, issued_by: staffId, valid_until: until };
+  }
+  throw new UserError("Please try again.");
 }
 
 /** A batch for a later day than today: printable before its codes are on the router. */

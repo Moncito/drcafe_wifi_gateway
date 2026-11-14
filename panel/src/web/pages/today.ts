@@ -1,7 +1,8 @@
 import { serialLabel, type CodeType } from "../../codes.ts";
 import type { AuditRow } from "../../services/audit.ts";
-import type { Batch } from "../../services/batches.ts";
-import type { DayCounts, HourBar, ShiftCounts } from "../../services/stats.ts";
+import { validDate } from "../../services/batches.ts";
+import type { Settings } from "../../services/settings.ts";
+import type { HourBar, PrintRow, ShiftCounts, Stock } from "../../services/stats.ts";
 import type { RouterStatus } from "../../services/routerlink.ts";
 import { closingMs, formatClock, formatDateLong, formatDateShort, shiftOf } from "../../time.ts";
 import { html, raw, type Safe } from "../html.ts";
@@ -9,16 +10,15 @@ import { html, raw, type Safe } from "../html.ts";
 export interface TodayData {
   now: number;
   date: string;
-  counts: DayCounts;
+  stock: Stock;
   bars: HourBar[];
   /** usual first logins per hour on this weekday (null: no history yet) */
   usual: Map<number, number> | null;
   shifts: ShiftCounts;
-  batches: Batch[];
-  batchBy: string | null;
-  /** today's slips: how many the router has (or were used) out of all made */
+  /** printed slips the router has, out of all unused valid ones */
   backlog: { total: number; onRouter: number };
-  tomorrow: { date: string; batch: Batch | null };
+  lastPrint: PrintRow | null;
+  settings: Settings;
   activity: AuditRow[];
   sync: RouterStatus;
   isAdmin: boolean;
@@ -76,21 +76,20 @@ function ring(used: number, total: number, label: string): Safe {
     <text x="42" y="47" text-anchor="middle">${Math.round(p * 100)}%</text></svg>`;
 }
 
-function slipCard(kind: "Solo" | "Group", used: number, total: number, lowAt: number): Safe {
-  const left = total - used;
-  const low = total > 0 && left <= lowAt;
+function slipCard(kind: "Solo" | "Group", inStock: number, usedToday: number, lowAt: number): Safe {
+  const low = inStock <= lowAt;
+  const all = inStock + usedToday;
   return html`<div class="card ring-card${low ? " is-low" : ""}">
-    ${ring(used, total, `${used} of ${total} ${kind.toLowerCase()} slips used`)}
+    ${ring(usedToday, all, `${usedToday} ${kind.toLowerCase()} slips used today, ${inStock} in stock`)}
     <div class="stack-6">
-      <span class="stat-label">${kind} slips${low ? " · running low" : ""}</span>
-      <span class="stat-num">${left} <small>left</small></span>
-      ${low ? html`<a class="small low-link" href="/print#extra">Print more →</a>` : html`<span class="stat-sub">${used} of ${total} used</span>`}
+      <span class="stat-label">${kind} slips in stock${low ? " · running low" : ""}</span>
+      <span class="stat-num">${inStock}</span>
+      ${low ? html`<a class="small low-link" href="/print#extra">Print more →</a>` : html`<span class="stat-sub">${usedToday} used today</span>`}
     </div>
   </div>`;
 }
 
 function statusBar(d: TodayData): Safe {
-  const daily = d.batches.find((b) => b.kind === "daily" && b.state !== "void");
   const side = d.sync.lastOkAt ? `Router ${d.sync.ok ? "connected" : "last seen"} · checked in ${ago(d.now - d.sync.lastOkAt)}` : "Router has not checked in yet";
   const missing = d.backlog.total - d.backlog.onRouter;
   let cls = "", dot = "dot-ok", main: Safe, progress: Safe | "" = "";
@@ -98,16 +97,16 @@ function statusBar(d: TodayData): Safe {
     cls = "is-err"; dot = "dot-err";
     main = html`<span><strong>Router not checking in.</strong> Check the café power and internet. Slips made now wait in the cloud and go on the router when it's back.</span>`;
   } else if (missing > 0) {
-    main = html`<span><strong>Adding today's slips to the router</strong> · ${d.backlog.onRouter} of ${d.backlog.total} · Print appears when all are on</span>`;
+    main = html`<span><strong>Adding new slips to the router</strong> · ${d.backlog.onRouter} of ${d.backlog.total} · Print appears when all are on</span>`;
     progress = html`<div class="progress" role="progressbar" aria-label="Slips on the router" aria-valuemin="0" aria-valuemax="${d.backlog.total}" aria-valuenow="${d.backlog.onRouter}"><div style="width:${Math.round((d.backlog.onRouter / Math.max(1, d.backlog.total)) * 100)}%"></div></div>`;
-  } else if (!daily) {
+  } else if (d.stock.solo + d.stock.group === 0) {
     cls = "is-warn"; dot = "dot-warn";
-    main = html`<span><strong>No batch for today yet.</strong> ${d.isAdmin ? html`<a href="/print">Make today's slips</a>` : "Ask the owner to print today's slips, or print extra slips."}</span>`;
+    main = html`<span><strong>No slips in stock.</strong> ${d.isAdmin ? html`<a href="/print">Print slips</a> or ` : ""}<a href="/give">give Wi‑Fi on screen</a>.</span>`;
   } else {
-    const extras = d.batches.filter((b) => b.kind === "extra" && b.state !== "void").length;
-    main = html`<span><strong>Today's batch ${daily.state === "printed" ? `printed${daily.printed_at ? ` at ${formatClock(daily.printed_at)}` : ""}` : "is on the router, ready to print"}</strong>${d.batchBy ? ` by ${d.batchBy}` : ""} · ${daily.solo_count + daily.group_count} slips${extras ? ` · ${plural(extras, "extra print")}` : ""} · codes stop at 1:00 AM</span>`;
+    const p = d.lastPrint;
+    main = html`<span><strong>${d.stock.solo} solo · ${d.stock.group} group slips in stock</strong>${p ? ` · last printed ${formatDateShort(businessDateOf(p.created_at))} by ${p.created_by ?? "?"}` : ""} · codes in use stop at 1:00 AM</span>`;
   }
-  return html`<section class="status-bar ${cls}" aria-label="Router and batch status">
+  return html`<section class="status-bar ${cls}" aria-label="Router and slip status">
     <div class="status-top">
       <div class="status-main"><span class="dot ${dot}"></span>${main}</div>
       <span class="status-side">${side}</span>
@@ -116,15 +115,15 @@ function statusBar(d: TodayData): Safe {
   </section>`;
 }
 
-function tomorrowLine(d: TodayData): Safe | "" {
-  if (!d.isAdmin) return "";
-  const b = d.tomorrow.batch;
-  const label = formatDateShort(d.tomorrow.date);
-  if (b) return html`<div class="ahead-line"><span><strong>Tomorrow (${label}):</strong> ${b.solo_count + b.group_count} slips ${b.state === "printed" ? "made and printed" : "made, not printed yet"} · they work from 5:00 AM</span><a href="/print?day=tomorrow">${b.state === "printed" ? "View" : "Print now"}</a></div>`;
-  // remind in the evening, so the owner can print before leaving
-  if (shiftOf(d.now) === "night") return html`<div class="ahead-line"><span><strong>Tomorrow's slips aren't made yet.</strong> You can make and print them tonight; they start working at 5:00 AM.</span><a href="/print?day=tomorrow">Print tomorrow's slips</a></div>`;
-  return "";
+function stockLine(d: TodayData): Safe | "" {
+  if (!d.stock.expiringSoon) return "";
+  return html`<div class="ahead-line"><span><strong>${d.stock.expiringSoon} slip${d.stock.expiringSoon === 1 ? "" : "s"} expire within 7 days.</strong> Hand out the oldest slips first (lowest serials).</span><a href="/print">See prints</a></div>`;
 }
+
+const businessDateOf = (ms: number) => {
+  const t = new Date(ms + 3 * 3600_000); // Manila (UTC+8) minus 5 h: the café day
+  return `${t.getUTCFullYear()}-${String(t.getUTCMonth() + 1).padStart(2, "0")}-${String(t.getUTCDate()).padStart(2, "0")}`;
+};
 
 function hourChart(d: TodayData): Safe {
   const usualMax = d.usual ? Math.max(0, ...d.bars.map((b) => d.usual!.get(b.hour) ?? 0)) : 0;
@@ -198,16 +197,17 @@ export function todayMain(d: TodayData): Safe {
   </div>
   <div class="actions">
     <a class="btn btn-outline" href="/lookup">Look up a code</a>
-    <a class="btn btn-primary" href="/print#extra">Print more slips</a>
+    <a class="btn btn-outline" href="/print#extra">Print more slips</a>
+    <a class="btn btn-primary" href="/give">Give Wi‑Fi</a>
   </div>
 </div>
 
 ${statusBar(d)}
-${tomorrowLine(d)}
+${stockLine(d)}
 
 <div class="stat-grid">
-  ${slipCard("Solo", d.counts.solo_used, d.counts.solo_total, 10)}
-  ${slipCard("Group", d.counts.group_used, d.counts.group_total, 3)}
+  ${slipCard("Solo", d.stock.solo, d.stock.soloUsedToday, 20)}
+  ${slipCard("Group", d.stock.group, d.stock.groupUsedToday, 5)}
   <a class="card stat card-link" href="/lookup">
     <span class="stat-label">Devices online now</span>
     <span class="stat-num">${d.sync.ok ? online.length : "–"}</span>
@@ -215,9 +215,9 @@ ${tomorrowLine(d)}
     <span class="stat-sub">${onlineS} solo · ${onlineG} on group codes · <span class="low-link" style="color:var(--brown)">See devices →</span></span>
   </a>
   <div class="card card-dark stat">
-    <span class="stat-label">Codes stop at 1:00 AM</span>
+    <span class="stat-label">Codes in use stop at 1:00 AM</span>
     <span class="countdown" data-until="${closingMs(d.date)}">${(() => { const m = Math.max(0, Math.round((closingMs(d.date) - d.now) / 60000)); return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m`; })()}</span>
-    <span class="stat-sub">Unused slips are deleted at closing</span>
+    <span class="stat-sub">Unused slips carry over to tomorrow${d.stock.givenToday ? ` · ${d.stock.givenToday} given on screen today` : ""}</span>
   </div>
 </div>
 

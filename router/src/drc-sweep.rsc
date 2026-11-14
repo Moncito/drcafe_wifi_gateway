@@ -1,7 +1,7 @@
 # drc-sweep: runs every minute.
 # - Codes whose clock time is over: disable, kick all devices, drop cookies.
-# - Closed window 01:00-04:59: if any S/G codes exist (e.g. the router was off
-#   at 1:00 AM), run the closing cleanup. Batches are only made from 05:00.
+# - Closed window 01:00-04:59: if any used S/G codes or S/G devices are left (e.g. the
+#   router was off at 1:00 AM), run the closing cleanup. Unused codes carry over.
 #@include _common.rsc
 :local now [$epoch]
 :if ($now = 0) do={ :return "" }
@@ -12,7 +12,8 @@
 :local closeH 1
 :if ([:len [/system scheduler find where name="drc-late-close"]] > 0) do={ :set closeH 3 }
 :if (($hh >= $closeH) && ($hh < 5)) do={
-  :if ([:len [/ip hotspot user find where name~$re]] > 0) do={ /system script run drc-closing }
+  # used codes or devices still online: run the closing (unused codes carry over)
+  :if (([:len [/ip hotspot user find where name~$re && (comment~"start=" || disabled=yes)]] > 0) || ([:len [/ip hotspot active find where user~$re]] > 0)) do={ /system script run drc-closing }
   :return ""
 }
 :foreach id in=[/ip hotspot user find where name~$re && disabled=no && comment~";end="] do={

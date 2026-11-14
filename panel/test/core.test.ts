@@ -8,9 +8,9 @@ import { openDb, type DB } from "../src/db.ts";
 import { MockRouter } from "../src/router/mock.ts";
 import { formatCommands, parseCommands, parseReport } from "../src/router/protocol.ts";
 import { createStaff } from "../src/services/auth.ts";
-import { codesForBatch, createBatch, getBatch, markPrinted, UserError, voidCodes } from "../src/services/batches.ts";
+import { codesForBatch, createBatch, getBatch, issueCode, markPrinted, POOL_TARGET, poolStatus, UserError, validDate, voidCodes } from "../src/services/batches.ts";
 import { getRouterStatus, handleRouterReport, queueKick, tokenMatches } from "../src/services/routerlink.ts";
-import { dayCounts } from "../src/services/stats.ts";
+import { stock } from "../src/services/stats.ts";
 import { businessDate, closingMs, isClosedWindow, msToRouterEpoch, routerEpochToMs } from "../src/time.ts";
 
 // 10:00 AM Manila, Sat Nov 14 2026
@@ -76,10 +76,13 @@ test("protocol: router report and answer round-trip; junk ignored", () => {
   assert.equal(tokenMatches(undefined, "abcdefghijklmnopqrstuvwxyz123456"), false);
 });
 
-test("batch: created pending, router adds at check-in, then printable; no duplicates", async () => {
+/** how many of these codes the (mock) router has */
+const countOn = (router: MockRouter, codes: { code: string }[]) => codes.filter((c) => router.users().some((u) => u.name === c.code)).length;
+
+test("batch: created pending, router adds at check-in, then printable; serials run on", async () => {
   const { db, router, staffId, checkIn, cleanup } = await setup();
   try {
-    const b = await createBatch(db, { kind: "daily", solo: 150, group: 30, requestId: reqId(), staffId, now: T10AM });
+    const b = await createBatch(db, { solo: 150, group: 30, requestId: reqId(), staffId, now: T10AM });
     assert.equal(b.state, "pending");
     const codes = await codesForBatch(db, b.id);
     assert.equal(codes.length, 180);
@@ -88,68 +91,88 @@ test("batch: created pending, router adds at check-in, then printable; no duplic
     assert.equal(codes[149]!.serial, 150);
     assert.equal(codes[150]!.type, "G");
     assert.equal(codes[179]!.serial, 30);
+    assert.equal(validDate(codes[0]!.valid_until), "2026-12-14", "valid 30 days");
     await assert.rejects(markPrinted(db, b.id, staffId), UserError, "can't print before the router has them");
 
-    await checkIn(); // router receives 150 adds (the limit per check-in)
-    await checkIn(); // reports them, receives the remaining 30
-    await checkIn(); // reports all
-    assert.equal(router.users().length, 180);
+    await checkIn(); await checkIn(); await checkIn(); // 150 adds per check-in
+    assert.equal(countOn(router, codes), 180);
     assert.equal((await getBatch(db, b.id))!.state, "on_router");
     await markPrinted(db, b.id, staffId);
     assert.equal((await getBatch(db, b.id))!.state, "printed");
+    const before = router.users().length;
     await checkIn();
-    assert.equal(router.users().length, 180, "nothing added twice");
+    assert.equal(router.users().length, before, "nothing added twice");
 
     // same request again (double click / retry) -> same batch
-    const again = await createBatch(db, { kind: "daily", solo: 150, group: 30, requestId: b.request_id, staffId, now: T10AM });
+    const again = await createBatch(db, { solo: 150, group: 30, requestId: b.request_id, staffId, now: T10AM });
     assert.equal(again.id, b.id);
-    await assert.rejects(createBatch(db, { kind: "daily", solo: 1, group: 0, requestId: reqId(), staffId, now: T10AM }), UserError);
-    const x = await createBatch(db, { kind: "extra", solo: 20, group: 0, requestId: reqId(), staffId, now: T10AM });
+    // next day: serials continue, never restart
+    const x = await createBatch(db, { solo: 20, group: 0, requestId: reqId(), staffId, now: T10AM + 86_400_000 });
     const xc = await codesForBatch(db, x.id);
-    assert.equal(xc[0]!.serial, 151);
-    assert.equal(xc[19]!.serial, 170);
+    assert.ok(xc[0]!.serial > 150);
+    assert.equal(xc[19]!.serial, xc[0]!.serial + 19);
   } finally { cleanup(); }
 });
 
-test("batch: today's refused in the 1–5 AM closed window", async () => {
-  const { db, staffId, cleanup } = await setup();
-  try {
-    await assert.rejects(createBatch(db, { kind: "daily", solo: 1, group: 0, requestId: reqId(), staffId, now: Date.UTC(2026, 10, 14, 18, 0) }), /closing/);
-  } finally { cleanup(); }
-});
-
-test("batch ahead: tomorrow's slips print at once, survive closing, reach the router at 5 AM", async () => {
+test("carry-over: unused slips survive closing, used ones end; lapsed ones are deleted", async () => {
   const { db, router, staffId, checkIn, setNow, cleanup } = await setup();
   try {
-    const t10pm = Date.UTC(2026, 10, 14, 14, 0); // Sat 10:00 PM
-    setNow(t10pm);
-    const b = await createBatch(db, { kind: "daily", day: "tomorrow", solo: 3, group: 1, requestId: reqId(), staffId, now: t10pm });
-    assert.equal(b.business_date, "2026-11-15");
-    await markPrinted(db, b.id, staffId, t10pm); // printable before the router has it
-    assert.equal((await getBatch(db, b.id))!.state, "printed");
+    const b = await createBatch(db, { solo: 3, group: 0, requestId: reqId(), staffId, now: T10AM });
+    await checkIn(); await checkIn();
+    const codes = await codesForBatch(db, b.id);
+    router.login(codes[0]!.code);
     await checkIn();
-    assert.equal(router.users().length, 0, "not added on the day before");
-    // made again at 2 AM (closed window): "tomorrow" is the same café day, so it's a duplicate
-    const t2am = Date.UTC(2026, 10, 14, 18, 0);
-    await assert.rejects(createBatch(db, { kind: "daily", day: "tomorrow", solo: 1, group: 0, requestId: reqId(), staffId, now: t2am }), /already exists/);
-    setNow(t2am);
+    setNow(Date.UTC(2026, 10, 14, 17, 30)); // 01:30, closed window: router closing runs
     await checkIn();
-    assert.equal(router.users().length, 0, "nothing added in the closed window");
-    setNow(Date.UTC(2026, 10, 14, 21, 1)); // Sun 5:01 AM
+    assert.equal(countOn(router, codes), 2, "the used code ended at closing, 2 unused carry over");
+    setNow(Date.UTC(2026, 10, 15, 2, 0)); // next day 10:00
     await checkIn();
-    assert.equal(router.users().length, 4, "added when its day starts");
-    assert.equal((await getBatch(db, b.id))!.state, "printed");
+    assert.equal(countOn(router, codes), 2);
+    assert.equal((await db.get<{ status: string }>("SELECT status FROM codes WHERE id = ?", codes[0]!.id))!.status, "expired");
+    router.login(codes[1]!.code); // a leftover slip works the next day
+    await checkIn();
+    assert.equal((await db.get<{ status: string }>("SELECT status FROM codes WHERE id = ?", codes[1]!.id))!.status, "active");
+    // 31 days later the last unused slip has lapsed: the panel tells the router to delete it
+    setNow(T10AM + 31 * 86_400_000);
+    await checkIn();
+    assert.equal(router.users().some((u) => u.name === codes[2]!.code), false);
+    const lapsed = (await db.get<{ status: string; first_login_at: number | null }>("SELECT status, first_login_at FROM codes WHERE id = ?", codes[2]!.id))!;
+    assert.equal(lapsed.status, "expired");
+    assert.equal(lapsed.first_login_at, null);
+    // printing in the closed window is fine now (slips are not tied to one day)
+    await createBatch(db, { solo: 1, group: 0, requestId: reqId(), staffId, now: Date.UTC(2026, 10, 14, 18, 0) });
+  } finally { cleanup(); }
+});
+
+test("give Wi-Fi: pool codes wait on the router, one is issued until tonight's closing", async () => {
+  const { db, router, staffId, checkIn, cleanup } = await setup();
+  try {
+    await assert.rejects(issueCode(db, "S", staffId, T10AM), UserError, "nothing on the router yet");
+    await checkIn(); await checkIn();
+    const p = await poolStatus(db, T10AM);
+    assert.equal(p.S.ready, POOL_TARGET.S);
+    assert.equal(p.G.ready, POOL_TARGET.G);
+    const c = await issueCode(db, "G", staffId, T10AM);
+    assert.equal(c.type, "G");
+    assert.equal(c.valid_until, closingMs("2026-11-14"));
+    const c2 = await issueCode(db, "G", staffId, T10AM);
+    assert.notEqual(c2.code, c.code, "never the same code twice");
+    assert.equal((await poolStatus(db, T10AM)).G.n, POOL_TARGET.G, "pool topped up");
+    router.login(c.code);
+    await checkIn();
+    assert.equal((await db.get<{ status: string }>("SELECT status FROM codes WHERE code = ?", c.code))!.status, "active");
+    await assert.rejects(issueCode(db, "S", staffId, Date.UTC(2026, 10, 14, 18, 0)), /closed/);
   } finally { cleanup(); }
 });
 
 test("lost answers are harmless: the next check-in sends the same work again", async () => {
   const { db, router, staffId, cleanup } = await setup();
   try {
-    const b = await createBatch(db, { kind: "extra", solo: 5, group: 0, requestId: reqId(), staffId, now: T10AM });
+    const b = await createBatch(db, { solo: 5, group: 0, requestId: reqId(), staffId, now: T10AM });
     await handleRouterReport(db, profiles, router.report(), T10AM); // answer lost on the way back
     router.apply(await handleRouterReport(db, profiles, router.report(), T10AM));
     router.apply(await handleRouterReport(db, profiles, router.report(), T10AM));
-    assert.equal(router.users().length, 5);
+    assert.equal(countOn(router, await codesForBatch(db, b.id)), 5);
     assert.equal((await getBatch(db, b.id))!.state, "on_router");
   } finally { cleanup(); }
 });
@@ -157,7 +180,7 @@ test("lost answers are harmless: the next check-in sends the same work again", a
 test("first login, devices, clock expiry, status", async () => {
   const { db, router, staffId, checkIn, setNow, cleanup } = await setup();
   try {
-    const b = await createBatch(db, { kind: "extra", solo: 3, group: 1, requestId: reqId(), staffId, now: T10AM });
+    const b = await createBatch(db, { solo: 3, group: 1, requestId: reqId(), staffId, now: T10AM });
     await checkIn(); await checkIn();
     const [s1, , , g1] = await codesForBatch(db, b.id);
     router.login(s1!.code);
@@ -166,7 +189,8 @@ test("first login, devices, clock expiry, status", async () => {
     const row = (await db.get<{ status: string; first_login_at: number; ends_at: number }>("SELECT * FROM codes WHERE code = ?", s1!.code))!;
     assert.equal(row.status, "active");
     assert.equal(row.ends_at - row.first_login_at, 3 * 3600_000);
-    assert.deepEqual({ ...(await dayCounts(db, "2026-11-14")) }, { solo_total: 3, solo_used: 1, group_total: 1, group_used: 1 });
+    const st0 = await stock(db, "2026-11-14", T10AM);
+    assert.deepEqual([st0.solo, st0.group, st0.soloUsedToday, st0.groupUsedToday], [2, 0, 1, 1]);
     const st = await getRouterStatus(db, T10AM + 1000);
     assert.equal(st.ok, true);
     assert.equal(st.active.length, 2);
@@ -181,7 +205,7 @@ test("first login, devices, clock expiry, status", async () => {
 test("void deletes on the router and kicks devices; disconnect kicks one device", async () => {
   const { db, router, staffId, checkIn, cleanup } = await setup();
   try {
-    const b = await createBatch(db, { kind: "extra", solo: 2, group: 1, requestId: reqId(), staffId, now: T10AM });
+    const b = await createBatch(db, { solo: 2, group: 1, requestId: reqId(), staffId, now: T10AM });
     await checkIn(); await checkIn();
     const codes = await codesForBatch(db, b.id);
     const g = codes.find((c) => c.type === "G")!;
@@ -200,14 +224,5 @@ test("void deletes on the router and kicks devices; disconnect kicks one device"
     assert.equal(router.active().some((a) => a.user === codes[0]!.code), false);
     await checkIn();
     assert.equal((await db.get<{ on_router: number }>("SELECT on_router FROM codes WHERE id = ?", codes[0]!.id))!.on_router, 0);
-  } finally { cleanup(); }
-});
-
-test("closed window: no adds sent to the router", async () => {
-  const { db, router, staffId, cleanup } = await setup();
-  try {
-    await createBatch(db, { kind: "extra", solo: 2, group: 0, requestId: reqId(), staffId, now: Date.UTC(2026, 10, 14, 16, 50) }); // 00:50
-    const answer = await handleRouterReport(db, profiles, router.report(), Date.UTC(2026, 10, 14, 17, 10)); // 01:10
-    assert.equal(answer, "ok\n");
   } finally { cleanup(); }
 });

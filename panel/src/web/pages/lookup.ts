@@ -1,8 +1,8 @@
 import { serialLabel } from "../../codes.ts";
 import type { RouterActive } from "../../router/types.ts";
-import type { CodeRow } from "../../services/batches.ts";
+import { validDate, type CodeRow } from "../../services/batches.ts";
 import type { RouterStatus } from "../../services/routerlink.ts";
-import { closingMs, formatClock, formatDateShort, formatDuration } from "../../time.ts";
+import { businessDate, closingMs, formatClock, formatDateShort, formatDuration } from "../../time.ts";
 import { html, type Safe } from "../html.ts";
 import { flash, type Flash } from "../layout.ts";
 import { routerStatus, statusBadge, typePill } from "./parts.ts";
@@ -35,7 +35,7 @@ function disconnectBtn(a: RouterActive, q: string, small = false): Safe {
 export function lookupMain(d: LookupData): Safe {
   const c = d.result;
   // ends 3 h after first login, or at 1:00 AM closing if that comes first
-  const closing = c ? closingMs(c.business_date) : 0;
+  const closing = c?.first_login_at ? closingMs(businessDate(c.first_login_at)) : 0;
   const end = c?.ends_at ? Math.min(c.ends_at, closing) : null;
   const endsAtClosing = !!c?.ends_at && c.ends_at > closing;
   const left = (endsAt: number | null) => (endsAt ? Math.max(0, endsAt - d.now) : null);
@@ -69,13 +69,15 @@ ${c ? html`
   </div>
   <div class="facts">
     <div><span>Serial</span><strong class="mono">${serialLabel(c.type, c.serial)}</strong></div>
-    <div><span>Day</span><strong>${c.business_date === d.today ? "Today" : formatDateShort(c.business_date)}</strong></div>
+    <div><span>${c.issued_at ? "Given on screen" : "Printed"}</span><strong>${c.issued_at ? formatClock(c.issued_at) : c.business_date === d.today ? "Today" : formatDateShort(c.business_date)}</strong></div>
+    ${c.status === "unused" ? html`<div><span>Valid until</span><strong>${formatDateShort(validDate(c.valid_until))}</strong></div>` : ""}
     <div><span>First login</span><strong>${c.first_login_at ? formatClock(c.first_login_at) : "Not used yet"}</strong></div>
     <div><span>Ends</span><strong>${end ? html`${formatClock(end)}${endsAtClosing ? " (closing)" : ""}${c.status === "active" ? html` <small class="muted">(${formatDuration(left(end)!)} left)</small>` : ""}` : "3 h after first login, or 1:00 AM"}</strong></div>
     <div><span>Devices</span><strong>${d.devices.length} of ${c.type === "G" ? 7 : 1}</strong></div>
   </div>
   ${c.status === "unused" && !c.on_router ? html`<p class="err-text">This code is not on the router yet. It is added at the router's next check-in (about 20 seconds).</p>` : ""}
-  ${c.status === "expired" ? html`<p class="muted">Time is up${c.expired_at ? ` (${formatClock(c.expired_at)})` : ""}. The customer needs a new slip with a new drink.</p>` : ""}
+  ${c.status === "expired" && !c.first_login_at ? html`<p class="muted">This slip expired unused on ${formatDateShort(validDate(c.valid_until))}. The customer needs a new slip.</p>` : ""}
+  ${c.status === "expired" && c.first_login_at ? html`<p class="muted">Time is up${c.expired_at ? ` (${formatClock(c.expired_at)})` : ""}. The customer needs a new slip with a new drink.</p>` : ""}
   ${c.status === "void" ? html`<p class="muted">This slip was voided${c.voided_at ? ` at ${formatClock(c.voided_at)}` : ""}.</p>` : ""}
   ${d.devices.length ? html`<div class="list">${d.devices.map((a) => html`
     <div class="list-row">

@@ -123,6 +123,27 @@ CREATE TABLE IF NOT EXISTS shift_drinks (
 );
 `;
 
+/**
+ * Columns added after the first release (2026-11-14):
+ * - codes.valid_until: unused slips carry over and stop at this time (30 days after printing).
+ *   Older codes keep their old rule: they stopped at their own day's 1:00 AM closing.
+ * - codes.issued_at / issued_by: a code shown on screen with "Give Wi-Fi".
+ * - batches.pool: codes kept on the router for "Give Wi-Fi" (never printed).
+ */
+async function migrate(client: Client) {
+  const cols = async (table: string) => new Set((await client.execute(`PRAGMA table_info(${table})`)).rows.map((r) => String(r.name)));
+  const c = await cols("codes");
+  if (!c.has("valid_until")) {
+    await client.execute("ALTER TABLE codes ADD COLUMN valid_until INTEGER");
+    // closing of the code's own day: 01:00 Manila the next day = 17:00 UTC on business_date
+    await client.execute("UPDATE codes SET valid_until = (CAST(strftime('%s', business_date) AS INTEGER) + 17 * 3600) * 1000 WHERE valid_until IS NULL");
+  }
+  if (!c.has("issued_at")) await client.execute("ALTER TABLE codes ADD COLUMN issued_at INTEGER");
+  if (!c.has("issued_by")) await client.execute("ALTER TABLE codes ADD COLUMN issued_by INTEGER");
+  if (!(await cols("batches")).has("pool")) await client.execute("ALTER TABLE batches ADD COLUMN pool INTEGER NOT NULL DEFAULT 0");
+  await client.execute("CREATE INDEX IF NOT EXISTS codes_live ON codes(status, valid_until)");
+}
+
 function wrap(exec: (sql: string, args: InValue[]) => Promise<{ rows: unknown[]; lastInsertRowid?: bigint; rowsAffected: number }>): Omit<DB, "tx"> {
   return {
     async all<T>(sql: string, ...args: InValue[]) {
@@ -144,6 +165,7 @@ export async function openDb(url: string, authToken?: string): Promise<DB & { cl
   const client: Client = createClient({ url, authToken: authToken || undefined, intMode: "number" });
   await client.executeMultiple("PRAGMA foreign_keys = ON;");
   await client.executeMultiple(SCHEMA);
+  await migrate(client);
   const base = wrap((sql, args) => client.execute({ sql, args }));
   // libSQL serialises writes; a simple queue keeps local transactions from overlapping
   let chain: Promise<unknown> = Promise.resolve();
